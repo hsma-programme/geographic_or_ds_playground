@@ -1,9 +1,10 @@
 import streamlit as st
 from app.utils import SITE_SELECTION_SUBMITTABLE
 
+st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+
 states = [
     "catchment_page_visited",
-    "compare_page_visited",
     "demand_deprivation_hotspots_page_visited",
     "demand_page_visited",
     "deprivation_page_visited",
@@ -46,10 +47,6 @@ pg = st.navigation(
         st.Page("app/Homepage.py", title="Welcome!"),
         st.Page("app/Demand.py", title="Where is our demand?"),
         st.Page("app/Deprivation.py", title="Where is there high need?"),
-        st.Page("app/Demand_Hotspots.py", title="Where is demand concentrated?"),
-        st.Page(
-            "app/Deprivation_Hotspots.py", title="Where is deprivation concentrated?"
-        ),
         st.Page(
             "app/Demand_Deprivation_Hotspots.py",
             title="Where do areas of both high demand and high deprivation occur?",
@@ -68,32 +65,35 @@ pg = st.navigation(
             "app/Demand_Travel_Hotspots.py",
             title="Where do high demand and high travel times intersect?",
         ),
-        # Isochrones as a visual way of exploring travel time
-        st.Page(
-            "app/Catchment_Isochrones_car.py",
-            title="Where are the transport gaps by car?",
-        ),
-        st.Page(
-            "app/Catchment_Isochrones_pt.py",
-            title="Where are the transport gaps by public tranport?",
-        ),
-        # 2 step floating catchment area - again, what to do about car vs PT, and cross-border?
-        st.Page("app/Catchment_2sfca_car.py", title="Who is currently underserved?"),
-        # 2 step floating catchment area - again, what to do about car vs PT, and cross-border?
-        st.Page("app/Catchment_2sfca_pt.py", title="Who is currently underserved?"),
+        # 2 step floating catchment area pages are commented out for now: their only
+        # prerequisite (the isochrones pages) has been removed, and 2SFCA needs
+        # utilisation/capacity data wiring before it can be shown as a real page.
+        # Re-enable once that path is built (see app/utils_investigations.py for the
+        # matching Investigation entries).
+        # st.Page(
+        #     "app/Catchment_2sfca_car.py",
+        #     title="Who is currently underserved? (car)",
+        # ),
+        # st.Page(
+        #     "app/Catchment_2sfca_pt.py",
+        #     title="Who is currently underserved? (public transport)",
+        # ),
         # Explore the utilisation of existing CDCs (capacity vs catchment)
-        st.Page("app/Utilisation.py", title="What's your Decision?"),
+        st.Page("app/Utilisation.py", title="How well-used are existing CDCs?"),
         # Display projected demand
-        st.Page("app/Projected_Demand.py", title="What's your Decision?"),
-        # NOTE - DO WE NEED PROJECTED UTILISATION TOO?
+        st.Page(
+            "app/Projected_Demand.py", title="Where will demand be in the future?"
+        ),
         # This page will also have a summary of all of the information they have uniquely collected.
         st.Page("app/Decide.py", title="What's your Decision?"),
         # Next, we go to the optimization page.
-        st.Page("app/Optimise_5_Sites.py", title="What does the maths say?"),
-        st.Page("app/Optimise_6_Sites.py", title="What does the maths say?"),
-        # We can compare both their solution and the optimized solution against the existing solution to show
-        # the benefits and who they affect
-        st.Page("app/Compare.py", title="What's the payoff?"),
+        st.Page(
+            "app/Optimise_5_Sites.py", title="What does the maths say? (one new site)"
+        ),
+        st.Page(
+            "app/Optimise_6_Sites.py",
+            title="What does the maths say? (two new sites)",
+        ),
     ]
 )
 

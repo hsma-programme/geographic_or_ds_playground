@@ -30,7 +30,6 @@ DEMAND = Investigation(
     parent=None,
     recommended_next=[
         "deprivation",
-        "hotspots_demand",
         "travel_car",
     ],
     analyst_prompt=("Show me the population aged 50-85 who may require CDC services."),
@@ -47,9 +46,7 @@ DEPRIVATION = Investigation(
     prerequisites=[],
     parent=None,
     recommended_next=[
-        "hotspots_deprivation",
         "demand",
-        "hotspots_demand",
         "travel_car",
     ],
     analyst_prompt=("Show me areas experiencing the highest deprivation."),
@@ -65,7 +62,7 @@ TRAVEL_CAR = Investigation(
     category=["accessibility"],
     prerequisites=[],
     parent=None,
-    recommended_next=["travel_pt", "isochrones_car", "demand"],
+    recommended_next=["travel_pt", "demand"],
     analyst_prompt=("Show me travel times to existing CDCs."),
     is_entry_point=True,
     analyst_days=3,
@@ -79,46 +76,12 @@ TRAVEL_PT = Investigation(
     category=["accessibility"],
     prerequisites=[],
     parent="travel_car",
-    recommended_next=["isochrones_pt", "travel_car", "demand"],
+    recommended_next=["travel_car", "demand"],
     analyst_prompt=(
         "Look at how travel times are different if patients are using public transport."
     ),
     is_entry_point=False,
     analyst_days=5,
-)
-
-HOTSPOTS_DEMAND = Investigation(
-    id="hotspots_demand",
-    title="Demand hotspots",
-    page="app/Demand_Hotspots.py",
-    category=["need"],
-    prerequisites=[
-        "demand",
-    ],
-    parent=None,
-    recommended_next=[
-        "deprivation",
-        "hotspots_deprivation",
-        "hotspots_demand_deprivation",
-    ],
-    analyst_prompt=("Identify clusters of demand."),
-    is_entry_point=False,
-    analyst_days=1,
-)
-
-HOTSPOTS_DEPRIVATION = Investigation(
-    id="hotspots_deprivation",
-    title="Deprivation hotspots",
-    page="app/Deprivation_Hotspots.py",
-    category=["equity"],
-    prerequisites=[
-        "deprivation",
-    ],
-    recommended_next=["demand", "hotspots_demand", "hotspots_demand_deprivation"],
-    parent=None,
-    analyst_prompt=("Identify clusters of deprivation."),
-    is_entry_point=False,
-    analyst_days=1,
 )
 
 HOTSPOTS_DEMAND_DEPRIVATION = Investigation(
@@ -153,7 +116,7 @@ HOTSPOTS_DEMAND_TRAVEL = Investigation(
         "demand",
         "travel_car",
     ],
-    recommended_next=["hotspots_deprivation", "hotspots_deprivation_travel"],
+    recommended_next=["hotspots_deprivation_travel"],
     parent=None,
     analyst_prompt=(
         "Combine demand and travel time to explore hotspots of poor access for high demand areas."
@@ -179,65 +142,45 @@ HOTSPOTS_DEPRIVATION_TRAVEL = Investigation(
     analyst_days=1,
 )
 
-ISOCHRONES_CAR = Investigation(
-    id="isochrones_car",
-    title="Catchment Areas - Car",
-    page="app/Catchment_Isochrones_car.py",
-    category=["accessibility"],
-    prerequisites=["travel_car"],
-    parent="travel_car",
-    recommended_next=["2sfca_car", "travel_pt", "isochrones_pt"],
-    analyst_prompt=(
-        "Show which communities fall within key travel-time thresholds by car."
-    ),
-    is_entry_point=False,
-    analyst_days=2,
-)
+# NOTE: Catchment_Isochrones_car.py / Catchment_Isochrones_pt.py pages have been
+# deleted (redundant with Travel_Car.py / Travel_Public_Transport.py, which already
+# show travel-time data). The Investigation entries for them are removed too.
 
-ISOCHRONES_PT = Investigation(
-    id="isochrones_pt",
-    title="Catchment Areas - Public Transport",
-    page="app/Catchment_Isochrones_pt.py",
-    category=["accessibility"],
-    prerequisites=["travel_pt"],
-    parent="travel_pt",
-    recommended_next=["2sfca_pt", "travel_car", "isochrones_car"],
-    analyst_prompt=(
-        "Show which communities fall within key travel-time thresholds by public transport."
-    ),
-    is_entry_point=False,
-    analyst_days=2,
-)
-
-TWO_SFCA_CAR = Investigation(
-    id="2sfca_car",
-    title="Service availability - car",
-    page="app/Catchment_2sfca_car.py",
-    category=["accessibility"],
-    prerequisites=["isochrones_car"],
-    parent="isochrones_car",
-    recommended_next=["hotspots_demand", "travel_pt", "isochrones_pt", "2sfca_pt"],
-    analyst_prompt=(
-        "Calculate the 2 step floating catchment area metric for car transport."
-    ),
-    is_entry_point=False,
-    analyst_days=2,
-)
-
-TWO_SFCA_PT = Investigation(
-    id="2sfca_pt",
-    title="Service availability - public transport",
-    page="app/Catchment_2sfca_pt.py",
-    category=["accessibility"],
-    prerequisites=["isochrones_pt"],
-    parent="isochrones_pt",
-    recommended_next=["hotspots_demand", "travel_car", "isochrones_car", "2sfca_car"],
-    analyst_prompt=(
-        "Calculate the 2 step floating catchment area metric for public transport."
-    ),
-    is_entry_point=False,
-    analyst_days=2,
-)
+# 2-step floating catchment area is a genuinely distinct metric (demand vs. capacity
+# vs. travel), but its prerequisite chain below points at the now-deleted isochrones
+# investigations, so it's commented out rather than deleted. Before re-enabling: fix
+# `prerequisites`/`parent` (they still reference "isochrones_car"/"isochrones_pt"),
+# wire up real content, and re-add the matching st.Page(...) entries in
+# streamlit_app.py.
+# TWO_SFCA_CAR = Investigation(
+#     id="2sfca_car",
+#     title="Service availability - car",
+#     page="app/Catchment_2sfca_car.py",
+#     category=["accessibility"],
+#     prerequisites=["isochrones_car"],
+#     parent="isochrones_car",
+#     recommended_next=["travel_pt", "2sfca_pt"],
+#     analyst_prompt=(
+#         "Calculate the 2 step floating catchment area metric for car transport."
+#     ),
+#     is_entry_point=False,
+#     analyst_days=2,
+# )
+#
+# TWO_SFCA_PT = Investigation(
+#     id="2sfca_pt",
+#     title="Service availability - public transport",
+#     page="app/Catchment_2sfca_pt.py",
+#     category=["accessibility"],
+#     prerequisites=["isochrones_pt"],
+#     parent="isochrones_pt",
+#     recommended_next=["travel_car", "2sfca_car"],
+#     analyst_prompt=(
+#         "Calculate the 2 step floating catchment area metric for public transport."
+#     ),
+#     is_entry_point=False,
+#     analyst_days=2,
+# )
 
 UTILISATION = Investigation(
     id="utilisation",
@@ -263,7 +206,6 @@ PROJECTED_DEMAND = Investigation(
     parent="demand",
     is_entry_point=False,
     recommended_next=[
-        "hotspots_demand",
         "hotspots_combined",
         "deprivation",
         "utilisation",
@@ -282,15 +224,11 @@ ALL_INVESTIGATIONS: dict[str, Investigation] = {
         DEPRIVATION,
         TRAVEL_CAR,
         TRAVEL_PT,
-        HOTSPOTS_DEMAND,
-        HOTSPOTS_DEPRIVATION,
         HOTSPOTS_DEMAND_DEPRIVATION,
         HOTSPOTS_DEMAND_TRAVEL,
         HOTSPOTS_DEPRIVATION_TRAVEL,
-        ISOCHRONES_CAR,
-        ISOCHRONES_PT,
-        TWO_SFCA_CAR,
-        TWO_SFCA_PT,
+        # TWO_SFCA_CAR and TWO_SFCA_PT are commented out above - re-add here once
+        # they're re-enabled.
         UTILISATION,
         PROJECTED_DEMAND,
     ]
