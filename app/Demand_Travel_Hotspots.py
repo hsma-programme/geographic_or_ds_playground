@@ -1,11 +1,45 @@
 import streamlit as st
-from app.utils import render_navigation, page_styling
+from functools import partial
+from app.utils import (
+    render_navigation,
+    write_terminal_html,
+    page_styling,
+    load_demand_travel_hotspots,
+)
 from app.utils_investigations import HOTSPOTS_DEMAND_TRAVEL
-
+from app.maps import render_demand_travel_hotspots_maps, make_selection_map
 
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
 
-st.title("Demand and Deprivation Hotspots")
+st.title("Demand & Travel Hotspots")
 
-render_navigation(HOTSPOTS_DEMAND_TRAVEL)
+hotspots_gdf = load_demand_travel_hotspots()
+
+intro_text = """
+> Your analyst has combined two of the maps you have already seen - where the demand is, and how long it takes to drive to the nearest existing CDC.
+<br><br>
+> They explain that a long drive only really matters where lots of people need the service. An empty moor with a two-hour drive is less of a worry than a busy town that is still awkward to reach.
+<br><br>
+> They tell you to use the buttons above the map to switch views. "Priority typology" colours every area by whether it is high or low on demand and on access - the red areas have high demand *and* poor access. "Statistical hotspots" only lights up clusters of high-demand, poor-access areas that are unlikely to be down to chance.
+<br><br>
+> They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
+<br><br>
+> They add, a little pointedly, that these travel times are to the *existing* four CDCs - the whole point of this exercise is to work out where a fifth might help most.
+"""
+
+char_count, reveal_speed = write_terminal_html(
+    intro_text,
+    output_path="app/assets/terminal_working/demand_travel_hotspots.html",
+)
+
+st.iframe("app/assets/terminal_working/demand_travel_hotspots.html", height=375)
+
+hotspots_selection_map = make_selection_map(
+    partial(render_demand_travel_hotspots_maps, hotspots_gdf),
+    "demand_travel_hotspots",
+)
+hotspots_selection_map()
+
+if st.session_state.site_submitted_demand_travel_hotspots:
+    render_navigation(HOTSPOTS_DEMAND_TRAVEL)

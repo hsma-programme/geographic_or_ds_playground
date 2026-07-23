@@ -388,17 +388,26 @@ def render_travel_maps(best_solution_gdf):
 
 
 ###########################
-# MARK: Demand & Deprivation Hotspots
+# MARK: Hotspots (shared)
 ###########################
-# lokigi's own get_hotspots() classifications, coloured by convention. Demand +
-# deprivation are combined offline (data/generate_hotspots.py) into a single
+# lokigi's own get_hotspots() classifications, coloured by convention. Each pair
+# of variables is combined offline (data/generate_*hotspots.py) into a single
 # GeoDataFrame; here we just draw it, mirroring the other .explore()-based maps
-# so it renders reliably in st_folium.
-_TYPOLOGY_COLOURS = {
+# so it renders reliably in st_folium. The priority typology and the statistical
+# clusters are two views of the same precomputed data, shared across every
+# hotspot page.
+_DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = {
     "High Demand / High Deprivation": "#d7191c",  # priority - act here first
     "High Demand / Low Deprivation": "#fdae61",  # worth watching
     "Low Demand / High Deprivation": "#fdae61",  # worth watching
     "Low Demand / Low Deprivation": "#bdbdbd",  # baseline
+}
+
+_DEMAND_TRAVEL_TYPOLOGY_COLOURS = {
+    "High Demand / Poor Access": "#d7191c",  # priority - act here first
+    "High Demand / Good Access": "#fdae61",  # worth watching
+    "Low Demand / Poor Access": "#fdae61",  # worth watching
+    "Low Demand / Good Access": "#bdbdbd",  # baseline
 }
 
 _CLUSTER_COLOURS = {
@@ -410,17 +419,19 @@ _CLUSTER_COLOURS = {
 }
 
 
-def render_demand_deprivation_hotspots_map(hotspots_gdf, what):
+def _render_hotspots_map(
+    hotspots_gdf, what, typology_colours, typology_alias, typology_caption
+):
     from matplotlib.colors import ListedColormap
 
     sites_gdf = load_devon_sites()
 
     if what == "typology":
-        colour_map = _TYPOLOGY_COLOURS
+        colour_map = typology_colours
         column = "attribute_typology"
         tooltip = ["LSOA21NM", "attribute_typology", "combined_score"]
-        aliases = ["Area:", "Demand / Deprivation:", "Combined priority score:"]
-        caption = "Demand × Deprivation priority"
+        aliases = ["Area:", typology_alias, "Combined priority score:"]
+        caption = typology_caption
     else:  # "clusters"
         colour_map = _CLUSTER_COLOURS
         column = "cluster_type"
@@ -473,18 +484,42 @@ def render_demand_deprivation_hotspots_map(hotspots_gdf, what):
     return st_folium(m, use_container_width=True)
 
 
-def render_demand_deprivation_hotspots_maps(hotspots_gdf):
+def _hotspots_view(typology_label):
+    """Shared radio toggle between the priority typology and the statistical
+    clusters. Returns "typology" or "clusters"."""
     map_selection = st.radio(
         "Select map type",
-        [
-            "Priority typology (demand × deprivation)",
-            "Statistical hotspots (Local Moran's I)",
-        ],
+        [typology_label, "Statistical hotspots (Local Moran's I)"],
+    )
+    return "typology" if map_selection == typology_label else "clusters"
+
+
+###########################
+# MARK: Demand & Deprivation Hotspots
+###########################
+def render_demand_deprivation_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (demand × deprivation)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEMAND_DEPRIVATION_TYPOLOGY_COLOURS,
+        typology_alias="Demand / Deprivation:",
+        typology_caption="Demand × Deprivation priority",
     )
 
-    if map_selection.startswith("Priority"):
-        return render_demand_deprivation_hotspots_map(hotspots_gdf, what="typology")
-    return render_demand_deprivation_hotspots_map(hotspots_gdf, what="clusters")
+
+###########################
+# MARK: Demand & Travel Hotspots
+###########################
+def render_demand_travel_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (demand × access)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEMAND_TRAVEL_TYPOLOGY_COLOURS,
+        typology_alias="Demand / Access:",
+        typology_caption="Demand × Access priority",
+    )
 
 
 ###############################
