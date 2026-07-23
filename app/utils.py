@@ -23,6 +23,7 @@ SITE_SELECTION_SUBMITTABLE = [
     "projected_demand",
     "demand_deprivation_hotspots",
     "demand_travel_hotspots",
+    "deprivation_travel_hotspots",
     "final",
 ]
 
@@ -147,6 +148,17 @@ def load_demand_travel_hotspots():
     # cluster_type / attribute_typology / combined_score / p_value / min_cost
     # columns keyed to the Devon LSOA geometry.
     return pd.read_pickle("data/demand_travel_hotspots.pkl")
+
+
+@st.cache_data
+def load_deprivation_travel_hotspots():
+    # Precomputed offline by data/generate_deprivation_travel_hotspots.py (a
+    # solution-level analysis: it solves the existing-CDCs / car-travel problem
+    # first, then runs Local Moran's I on deprivation vs travel time). Re-run that
+    # script if the deprivation/car-travel inputs change. Returns a GeoDataFrame
+    # with cluster_type / attribute_typology / combined_score / p_value / min_cost
+    # columns keyed to the Devon LSOA geometry.
+    return pd.read_pickle("data/deprivation_travel_hotspots.pkl")
 
 
 def write_terminal_html(

@@ -410,6 +410,13 @@ _DEMAND_TRAVEL_TYPOLOGY_COLOURS = {
     "Low Demand / Good Access": "#bdbdbd",  # baseline
 }
 
+_DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = {
+    "High Deprivation / Poor Access": "#d7191c",  # priority - act here first
+    "High Deprivation / Good Access": "#fdae61",  # worth watching
+    "Low Deprivation / Poor Access": "#fdae61",  # worth watching
+    "Low Deprivation / Good Access": "#bdbdbd",  # baseline
+}
+
 _CLUSTER_COLOURS = {
     "Hotspot": "#d7191c",  # high-high
     "High-Low Outlier": "#fee08b",
@@ -519,6 +526,20 @@ def render_demand_travel_hotspots_maps(hotspots_gdf):
         _DEMAND_TRAVEL_TYPOLOGY_COLOURS,
         typology_alias="Demand / Access:",
         typology_caption="Demand × Access priority",
+    )
+
+
+###########################
+# MARK: Deprivation & Travel Hotspots
+###########################
+def render_deprivation_travel_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (deprivation × access)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS,
+        typology_alias="Deprivation / Access:",
+        typology_caption="Deprivation × Access priority",
     )
 
 
