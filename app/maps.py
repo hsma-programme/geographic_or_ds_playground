@@ -387,6 +387,106 @@ def render_travel_maps(best_solution_gdf):
         )
 
 
+###########################
+# MARK: Demand & Deprivation Hotspots
+###########################
+# lokigi's own get_hotspots() classifications, coloured by convention. Demand +
+# deprivation are combined offline (data/generate_hotspots.py) into a single
+# GeoDataFrame; here we just draw it, mirroring the other .explore()-based maps
+# so it renders reliably in st_folium.
+_TYPOLOGY_COLOURS = {
+    "High Demand / High Deprivation": "#d7191c",  # priority - act here first
+    "High Demand / Low Deprivation": "#fdae61",  # worth watching
+    "Low Demand / High Deprivation": "#fdae61",  # worth watching
+    "Low Demand / Low Deprivation": "#bdbdbd",  # baseline
+}
+
+_CLUSTER_COLOURS = {
+    "Hotspot": "#d7191c",  # high-high
+    "High-Low Outlier": "#fee08b",
+    "Low-High Outlier": "#abd9e9",
+    "Coldspot": "#2c7bb6",  # low-low
+    "Not Significant": "#bdbdbd",
+}
+
+
+def render_demand_deprivation_hotspots_map(hotspots_gdf, what):
+    from matplotlib.colors import ListedColormap
+
+    sites_gdf = load_devon_sites()
+
+    if what == "typology":
+        colour_map = _TYPOLOGY_COLOURS
+        column = "attribute_typology"
+        tooltip = ["LSOA21NM", "attribute_typology", "combined_score"]
+        aliases = ["Area:", "Demand / Deprivation:", "Combined priority score:"]
+        caption = "Demand × Deprivation priority"
+    else:  # "clusters"
+        colour_map = _CLUSTER_COLOURS
+        column = "cluster_type"
+        tooltip = ["LSOA21NM", "cluster_type", "p_value"]
+        aliases = ["Area:", "Cluster type:", "p-value:"]
+        caption = "Local Moran's I cluster"
+
+    # .copy() because hotspots_gdf is a cached object reused across fragment reruns.
+    gdf = hotspots_gdf.copy()
+
+    # Keep only categories actually present, in the fixed order above, so the
+    # ListedColormap lines up with the categorical values.
+    present = [c for c in colour_map if c in set(gdf[column].dropna().unique())]
+    gdf[column] = pd.Categorical(gdf[column], categories=present, ordered=True)
+    cmap = ListedColormap([colour_map[c] for c in present])
+
+    m = gdf.round(3).explore(
+        column=column,
+        categorical=True,
+        cmap=cmap,
+        tooltip=tooltip,
+        tooltip_kwds={
+            "aliases": aliases,
+            "labels": True,
+            "sticky": False,
+        },
+        name="Hotspots",
+        zoom_start=9,
+        legend_kwds={"caption": caption},
+    )
+
+    # Workaround for legend colours (same as the deprivation map)
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .legend-labels {
+            color: black !important;
+        }
+
+        .legend-title {
+            color: black !important;
+        }
+        </style>
+        """)
+    )
+
+    m = add_sites_to_map(m, sites_gdf=sites_gdf)
+    m = add_site_legend(m)
+
+    return st_folium(m, use_container_width=True)
+
+
+def render_demand_deprivation_hotspots_maps(hotspots_gdf):
+    map_selection = st.radio(
+        "Select map type",
+        [
+            "Priority typology (demand × deprivation)",
+            "Statistical hotspots (Local Moran's I)",
+        ],
+    )
+
+    if map_selection.startswith("Priority"):
+        return render_demand_deprivation_hotspots_map(hotspots_gdf, what="typology")
+    return render_demand_deprivation_hotspots_map(hotspots_gdf, what="clusters")
+
+
 ###############################
 # MARK: Site selection wrapper
 ###############################

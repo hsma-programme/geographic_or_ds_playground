@@ -21,6 +21,8 @@ SITE_SELECTION_SUBMITTABLE = [
     "public_transport",
     "utilisation",
     "projected_demand",
+    "demand_deprivation_hotspots",
+    "final",
 ]
 
 
@@ -123,6 +125,16 @@ def create_deprivation_gdf():
         deprivation_df, left_on="LSOA21NM", right_on="LSOA name (2021)"
     )
     return full_gdf
+
+
+@st.cache_data
+def load_demand_deprivation_hotspots():
+    # Precomputed offline by data/generate_hotspots.py so the page doesn't run
+    # Local Moran's I (spatial weights + permutation inference over 729 LSOAs)
+    # live on every session. Re-run that script if the demand/deprivation inputs
+    # change. Returns a GeoDataFrame with cluster_type / attribute_typology /
+    # combined_score / p_value columns keyed to the Devon LSOA geometry.
+    return pd.read_pickle("data/demand_deprivation_hotspots.pkl")
 
 
 def write_terminal_html(
