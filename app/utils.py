@@ -20,6 +20,7 @@ SITE_SELECTION_SUBMITTABLE = [
     "car_travel",
     "public_transport",
     "utilisation",
+    "projected_demand",
 ]
 
 
@@ -79,6 +80,38 @@ def create_demand_gdf():
     devon_gdf = load_devon_geography()
     demand_df = load_demand()
     full_gdf = devon_gdf.merge(demand_df, left_on="LSOA21NM", right_on="LSOA 2021 Name")
+    return full_gdf
+
+
+@st.cache_data
+def load_demand_projected():
+    return pd.read_csv("data/demand_MF_50_84_projected_2036.csv")
+
+
+@st.cache_data
+def create_projected_demand_gdf():
+    devon_gdf = load_devon_geography()
+    current_df = load_demand()
+    projected_df = load_demand_projected()
+
+    growth_df = current_df[["LSOA 2021 Name", "MF50-84", "Total"]].merge(
+        projected_df[["LSOA 2021 Name", "MF50-84", "Total"]],
+        on="LSOA 2021 Name",
+        suffixes=(" (Now)", " (2036)"),
+    )
+    growth_df["MF50-84 Growth"] = (
+        growth_df["MF50-84 (2036)"] - growth_df["MF50-84 (Now)"]
+    )
+    growth_df["MF50-84 Growth (%)"] = (
+        (growth_df["MF50-84 (2036)"] / growth_df["MF50-84 (Now)"] - 1) * 100
+    ).round(1)
+
+    full_gdf = devon_gdf.merge(
+        projected_df, left_on="LSOA21NM", right_on="LSOA 2021 Name"
+    ).merge(
+        growth_df[["LSOA 2021 Name", "MF50-84 Growth", "MF50-84 Growth (%)"]],
+        on="LSOA 2021 Name",
+    )
     return full_gdf
 
 

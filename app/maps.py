@@ -1,6 +1,7 @@
 from app.utils import (
     create_demand_gdf,
     create_deprivation_gdf,
+    create_projected_demand_gdf,
     load_devon_sites,
     load_population_weighted_centroids,
 )
@@ -191,6 +192,64 @@ def render_demand_map():
             "sticky": False,
         },
         name="Population",
+        zoom_start=9,
+        scheme="Percentiles",
+    )
+
+    # Add point layer
+    m = add_sites_to_map(m, sites_gdf=sites_gdf)
+    m = add_site_legend(m)
+    for child in m._children.values():
+        if child == "color_scale" or hasattr(child, "caption"):
+            # Default is usually ~450px. Let's make it thinner/wider:
+            child.width = 800
+
+    return st_folium(m, use_container_width=True)
+
+
+###########################
+# MARK: Projected Demand
+###########################
+def render_projected_demand_map():
+    projected_gdf = create_projected_demand_gdf()
+    sites_gdf = load_devon_sites()
+
+    raw_options = ["MF50-84 Growth (%)", "MF50-84", "Total"]
+
+    alias_dict = {
+        "MF50-84 Growth (%)": "Projected Growth 2026-2036 (%)",
+        "MF50-84": "Projected Per-LSOA Population in 2036 - Between 50 and 84",
+        "Total": "Projected Total Per-LSOA Population in 2036",
+    }
+
+    selected_metric = st.radio(
+        "Select Metric to Visualise",
+        raw_options,
+        format_func=lambda x: alias_dict.get(x, x),
+        index=0,
+    )
+
+    other_column_aliases = {
+        "MF50-84": "Projected 50-84 Population (2036):",
+        "Total": "Projected Total Population (2036):",
+    }
+    tooltip_columns = ["LSOA21NM", selected_metric]
+    tooltip_aliases = ["Area:", f"{alias_dict.get(selected_metric, selected_metric)}:"]
+    for column, alias in other_column_aliases.items():
+        if column not in tooltip_columns:
+            tooltip_columns.append(column)
+            tooltip_aliases.append(alias)
+
+    # Create choropleth
+    m = projected_gdf.explore(
+        column=selected_metric,
+        tooltip=tooltip_columns,
+        tooltip_kwds={
+            "aliases": tooltip_aliases,
+            "labels": True,
+            "sticky": False,
+        },
+        name="Projected Population",
         zoom_start=9,
         scheme="Percentiles",
     )
