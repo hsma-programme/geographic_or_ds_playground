@@ -36,6 +36,8 @@ intro_text = f"""
 <br><br>
 > They tell you that you can swap between each LSOA showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
 <br><br>
+> "Same catch as last time," they add. "The colours only reflect the sites open today - the candidate pins are there for you to pick from, not to show what would happen if one were actually built."
+<br><br>
 > They warn you that the numbers can look rather different this time, and that public transport in rural Devon is not for the faint-hearted.
 <br><br>
 > They have now used the phrase "transport modelling is more complicated than people realise" on seventeen separate occasions. You have stopped counting out loud.

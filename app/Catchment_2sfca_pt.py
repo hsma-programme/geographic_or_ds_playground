@@ -24,6 +24,8 @@ intro_text = """
 <br><br>
 > "Watch how much more of the map turns red. A patient without a car might live the same number of miles from a CDC as their neighbour, but a missing bus route can put it effectively out of reach. These are often exactly the people who can least afford a taxi or a day off work."
 <br><br>
+> "Same catch as the car version," they add. "This is all worked out from the four CDCs open today - the candidate pins are there for you to choose from, not to show what adding one would do."
+<br><br>
 > "The travel limits above are longer than the car version on purpose - public transport journeys simply take more time. Try a few, and see whose access quietly disappears."
 <br><br>
 > They gesture at the map and fall silent, letting it make the argument for them.

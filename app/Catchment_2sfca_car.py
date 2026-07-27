@@ -24,6 +24,8 @@ intro_text = """
 <br><br>
 > "Green areas are comfortably served. Red areas are stretched thin - and the deepest red areas can't reach any CDC at all within the travel limit. The clever part: two neighbourhoods the same distance from a CDC can still end up very different colours, if one of them is sharing that centre with far more people."
 <br><br>
+> "One catch," they add, glancing at the blue pins. "This is all worked out from the four CDCs open today. Clicking a candidate pin doesn't add its capacity in - it just tells us which one you'd pick."
+<br><br>
 > "Use the buttons above the map to change how far you assume people are willing to drive. Then see who gets left behind."
 <br><br>
 > They leave the map with you and quietly refill their coffee.

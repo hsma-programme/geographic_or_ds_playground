@@ -42,6 +42,8 @@ intro_text = f"""
 <br><br>
 > They tell you that you can swap between each LSOA showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
 <br><br>
+> "One thing to flag," they add, nodding at the blue pins. "Those colours are all worked out from the sites open today. Clicking a candidate pin just tells us which one you'd pick - it doesn't show you what travel times would look like if it were actually built."
+<br><br>
 > They scurry off quickly before you can ask any further questions, muttering something about needing to reticulate some splines.
 <br><br>
 > The map looms large on your screen. You must explore it yourself.
