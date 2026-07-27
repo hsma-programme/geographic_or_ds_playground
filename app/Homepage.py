@@ -81,3 +81,11 @@ with col2:
 
 with col3:
     investigation_button(TRAVEL_CAR)
+
+# Escape hatch: if a returning session was restored mid-flow, let the user wipe
+# it and begin again from a clean slate.
+if st.session_state.pages_visited:
+    st.write("")
+    from app.persistence import render_reset_button
+
+    render_reset_button(label="Start over from the beginning", key="reset_home")

@@ -1,5 +1,6 @@
 import streamlit as st
 from app.utils import page_styling, load_devon_sites, write_terminal_html
+from app.persistence import render_reset_button
 import time
 from PIL import Image
 import pandas as pd
@@ -115,3 +116,6 @@ if run:
             "proportion_within_coverage_threshold",
         ],
     )
+
+st.write("")
+render_reset_button(label="Start the whole exercise again", key="reset_opt6")

@@ -445,6 +445,11 @@ def render_navigation(current: Investigation) -> None:
     ):
         st.switch_page("app/Decide.py")
 
+    # Escape hatch: wipe progress (session + browser storage) and start again.
+    from app.persistence import render_reset_button
+
+    render_reset_button(label="Start over", key="reset_nav")
+
     # Padding
     st.write("")
     st.write("")

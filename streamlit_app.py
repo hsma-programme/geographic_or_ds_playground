@@ -1,7 +1,21 @@
 import streamlit as st
 from app.utils import SITE_SELECTION_SUBMITTABLE
+from app.persistence import (
+    get_store,
+    load_into_session,
+    save,
+    maybe_restore_page,
+    record_current_page,
+    CURRENT_PAGE_KEY,
+)
 
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+
+# Browser-local persistence so a refresh / dropped websocket / container restart
+# doesn't wipe a user's progress. The store is built once per run (it renders a
+# hidden localStorage component); if the optional component isn't installed this
+# is a no-op and the app behaves exactly as before.
+progress_store = get_store()
 
 states = [
     "catchment_page_visited",
@@ -23,6 +37,10 @@ if "pages_visited" not in st.session_state:
 # A single shared notepad that follows the user across every evidence page.
 if "user_notes" not in st.session_state:
     st.session_state.user_notes = ""
+
+# The page the user is currently on (persisted so a refresh returns them here).
+if CURRENT_PAGE_KEY not in st.session_state:
+    st.session_state[CURRENT_PAGE_KEY] = ""
 
 if "homepage_visited" not in st.session_state:
     st.session_state.homepage_visited = False
@@ -46,8 +64,12 @@ for i in SITE_SELECTION_SUBMITTABLE:
         st.session_state[f"site_submitted_{i}"] = False
 
 
-pg = st.navigation(
-    [
+# Layer any previously-saved progress on top of the freshly-seeded defaults,
+# before the page renders.
+load_into_session(progress_store)
+
+
+pages = [
         st.Page("app/Homepage.py", title="Welcome!", visibility="hidden"),
         st.Page("app/Demand.py", title="Where is our demand?", visibility="hidden"),
         st.Page(
@@ -122,7 +144,18 @@ pg = st.navigation(
             title="A new challenger appears!",
             visibility="hidden",
         ),
-    ]
-)
+]
+
+pg = st.navigation(pages)
+
+# After progress is restored, bring the user back to the page they were on when
+# they last left (refresh/crash), then record where they are now.
+pages_by_path = {p.url_path: p for p in pages}
+maybe_restore_page(pg, pages_by_path)
+record_current_page(pg)
 
 pg.run()
+
+# Persist any changes made during this run (writes only when the snapshot
+# actually changed, so unchanged reruns cost nothing).
+save(progress_store)

@@ -6,6 +6,7 @@ from app.utils import (
     load_devon_sites,
     NOTES_STATE_KEY,
 )
+from app.persistence import render_reset_button
 
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
@@ -70,3 +71,6 @@ else:
         use_container_width=True,
     ):
         st.switch_page("app/Aha.py")
+
+st.write("")
+render_reset_button(label="Start over from the beginning", key="reset_decide")
