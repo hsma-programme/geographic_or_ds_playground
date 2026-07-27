@@ -12,55 +12,53 @@ page_styling()
 st.write("")
 st.write("")
 
-decisions = []
+if not st.session_state.site_submitted_final:
+    decisions = []
 
-for key in SITE_SELECTION_SUBMITTABLE:
-    decisions.append(st.session_state[f"confirmed_site_{key}"])
+    for key in SITE_SELECTION_SUBMITTABLE:
+        if "final" not in key:
+            decisions.append(st.session_state[f"confirmed_site_{key}"])
 
-decision_string = [
-    f"You chose {decision['Site']} for {decision['What'].lower().replace('_', ' ')}"
-    for decision in decisions
-    if decision is not None
-]
+    decision_string = [
+        f"You chose {decision['Site']} for {decision['What'].lower().replace('_', ' ')}"
+        for decision in decisions
+        if decision is not None
+    ]
 
-st.info(
-    f"""
-    {"\n\n".join(decision_string)}
-    """
-)
+    st.info(
+        f"""
+        {"\n\n".join(decision_string)}
+        """
+    )
 
+    devon_sites = load_devon_sites()
+    selectable_sites = devon_sites[devon_sites["Existing"] == "No"]
 
-devon_sites = load_devon_sites()
-selectable_sites = devon_sites[devon_sites["Existing"] == "No"]
+    st.write("<br><br>", unsafe_allow_html=True)
 
+    selected_site_final = st.pills(
+        "Select your final choice from all of the available sites by clicking on the site name below.",
+        selectable_sites,
+    )
 
-st.pills("Select your final choice.", selectable_sites)
+    st.write("<br><br>", unsafe_allow_html=True)
 
-
-intro_text = """
-> But wait!
-<br><br>
-> A new computer person runs into the room. The sound of the 80s hit 'I am the one and only' seems to follow them.
-<br><br>
-> "I heard you have a location optimization problem. I came as soon as I could".
-<br><br>
-> They flick their action-hero hair back.
-<br><br>
-> "The optimiser is ready to run. Let's take a look..."
-"""
-
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/demand.html",
-)
-
-st.iframe("app/assets/terminal_working/demand.html", height=275)
-
-
-if st.button(
-    "Make your choice.",
-    key="btn_optimise_5_sites",
-    icon=":material/balance:",
-    use_container_width=True,
-):
-    st.switch_page("app/Optimise_5_Sites.py")
+    if st.button(
+        "Make your choice.",
+        key="btn_make_choice_5_sites",
+        icon=":material/balance:",
+        use_container_width=True,
+        disabled=selected_site_final is None,
+    ):
+        if not st.session_state.site_submitted_final:
+            st.session_state.confirmed_site_final = selected_site_final
+            st.session_state.site_submitted_final = True
+        st.switch_page("app/Aha.py")
+else:
+    if st.button(
+        "You made your choice already. Click here to proceed.",
+        key="btn_make_choice_5_sites",
+        icon=":material/balance:",
+        use_container_width=True,
+    ):
+        st.switch_page("app/Aha.py")
