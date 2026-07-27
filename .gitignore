@@ -14,6 +14,16 @@ data/Lower_layer_Super_Output_Areas_December_2021_Boundaries_EW_BSC_V4_645378833
 data/File_1_IoD2025_Index_of_Multiple_Deprivation.xlsx
 data/sapelsoasyoa20222024.xlsx
 
+# Optimiser artifacts for the 7- and 8-site solutions. The app only uses the
+# 5- and 6-site ones; these are kept locally for offline regeneration but
+# excluded from the deployed repo (~82MB of GIFs alone) to keep the image small.
+data/solution_car_7.gif
+data/solution_car_8.gif
+data/solution_car_7_best.pkl
+data/solution_car_8_best.pkl
+data/solution_car_7_worst.pkl
+data/solution_car_8_worst.pkl
+
 app/assets/terminal_working/*.html
 app/assets/crt_working/*.html
 
