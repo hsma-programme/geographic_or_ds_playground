@@ -65,6 +65,22 @@ def load_devon_sites():
 
 
 @st.cache_data
+def load_cdc_utilisation():
+    # Made-up weekly capacity vs. weekly caseload for the four *existing* CDCs.
+    # These are illustrative teaching figures, not real activity data. Proposed
+    # (not-yet-built) sites are deliberately absent - they have no utilisation.
+    return pd.read_csv("data/devon_cdc_utilisation.csv")
+
+
+@st.cache_data
+def load_devon_sites_with_utilisation():
+    """Existing CDCs as a GeoDataFrame with weekly_capacity / weekly_caseload
+    columns merged in (proposed sites get NaN - they aren't built yet)."""
+    sites = load_devon_sites()
+    return sites.merge(load_cdc_utilisation(), on="Facility_Name", how="left")
+
+
+@st.cache_data
 def load_devon_geography():
     return geopandas.read_file("data/LSOA_Devon_2021_EW_BSC_V4.gpkg")
 
@@ -599,6 +615,26 @@ def setup_lokigi_site_problem_car_existing():
 
     lokigi_site_problem.add_travel_matrix(
         load_car_travel_matrix(), unit="minutes", source_col="from_id"
+    )
+
+    return lokigi_site_problem
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_utilisation():
+    # Utilisation is a baseline diagnostic of the *existing* sites: how much of
+    # each site's capacity today's caseload uses. It needs neither travel matrix
+    # nor solve() - just the sites registered with capacity/current-load columns.
+    lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
+
+    existing_sites = load_devon_sites_with_utilisation()
+    existing_sites = existing_sites[existing_sites["Existing"] == "Yes"]
+
+    lokigi_site_problem.add_sites(
+        existing_sites,
+        candidate_id_col="Facility_Name",
+        capacity_col="weekly_capacity",
+        current_load_col="weekly_caseload",
     )
 
     return lokigi_site_problem

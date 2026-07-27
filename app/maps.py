@@ -3,7 +3,9 @@ from app.utils import (
     create_deprivation_gdf,
     create_projected_demand_gdf,
     load_devon_sites,
+    load_devon_sites_with_utilisation,
     load_population_weighted_centroids,
+    setup_lokigi_site_problem_utilisation,
 )
 import streamlit as st
 import folium
@@ -263,6 +265,272 @@ def render_projected_demand_map():
             child.width = 800
 
     return st_folium(m, use_container_width=True)
+
+
+###########################
+# MARK: Utilisation
+###########################
+# Utilisation is a site-level metric (how full each existing CDC is today),
+# not a per-LSOA choropleth, so unlike the other maps this one draws no region
+# layer - just the sites on a plain basemap, mirroring lokigi's
+# plot_site_utilisation(). Existing CDCs are coloured/sized by utilisation
+# (green = spare capacity, red = at/over capacity, following lokigi's RdYlGn_r
+# convention); proposed CDCs stay blue so they remain clickable for the site
+# selection at the bottom of the page.
+_UTIL_COLOUR_MIN = 0.5  # <=50% used -> full green
+_UTIL_COLOUR_MAX = 1.0  # >=100% used -> full red (over-capacity clips to red)
+
+
+def _utilisation_style(ratio):
+    """Return (hex colour, marker radius) for a utilisation ratio, using the
+    same green->red reading as lokigi: low ratio = green + small, high (bad)
+    ratio = red + large so over-capacity sites stand out."""
+    import matplotlib
+    from matplotlib.colors import Normalize, to_hex
+
+    norm = Normalize(vmin=_UTIL_COLOUR_MIN, vmax=_UTIL_COLOUR_MAX)
+    cmap = matplotlib.colormaps["RdYlGn_r"]
+    t = min(max(norm(ratio), 0.0), 1.0)  # clip into [0, 1]
+    colour = to_hex(cmap(t))
+    radius = 12 + t * 16  # 12px (green) -> 28px (red)
+    return colour, radius
+
+
+def render_utilisation_map():
+    problem = setup_lokigi_site_problem_utilisation()
+    summary = problem.site_utilisation_summary().sort_values(
+        "utilisation_ratio", ascending=False
+    )
+
+    sites_gdf = load_devon_sites_with_utilisation()
+    existing_sites = sites_gdf[sites_gdf["Existing"] == "Yes"]
+    proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
+
+    # Centre roughly on Devon; fit to the sites afterwards.
+    m = folium.Map(location=[50.72, -3.8], zoom_start=9, tiles="cartodbpositron")
+
+    existing_group = folium.FeatureGroup(name="Existing CDCs (utilisation)")
+    proposed_group = folium.FeatureGroup(name="Proposed CDCs")
+
+    for _, row in existing_sites.iterrows():
+        ratio = summary.loc[row["Facility_Name"], "utilisation_ratio"]
+        capacity = int(summary.loc[row["Facility_Name"], "capacity"])
+        caseload = int(summary.loc[row["Facility_Name"], "current_load"])
+        headroom = int(summary.loc[row["Facility_Name"], "headroom"])
+        colour, radius = _utilisation_style(ratio)
+
+        over = headroom < 0
+        headroom_line = (
+            f"<b style='color:#b2182b'>Over capacity by {abs(headroom)}/week</b>"
+            if over
+            else f"Spare capacity: {headroom}/week"
+        )
+        popup_html = (
+            f"<b>{row['Facility_Name']}</b><br>"
+            f"Weekly capacity: {capacity}<br>"
+            f"Weekly caseload: {caseload}<br>"
+            f"Utilisation: <b>{ratio * 100:.0f}%</b><br>"
+            f"{headroom_line}"
+        )
+
+        folium.CircleMarker(
+            location=[row.geometry.y, row.geometry.x],
+            radius=radius,
+            color="#333333",
+            weight=1,
+            fill=True,
+            fill_color=colour,
+            fill_opacity=0.85,
+            popup=folium.Popup(popup_html, max_width=260),
+            tooltip=f"{row['Facility_Name']}: {ratio * 100:.0f}% utilised",
+        ).add_to(existing_group)
+
+    for _, row in proposed_sites.iterrows():
+        folium.Marker(
+            location=[row.geometry.y, row.geometry.x],
+            popup=row["Facility_Name"],
+            tooltip=row["Facility_Name"],
+            icon=folium.Icon(icon="plus", prefix="fa", color="blue"),
+        ).add_to(proposed_group)
+
+    existing_group.add_to(m)
+    proposed_group.add_to(m)
+
+    # Frame the map on all sites.
+    bounds = sites_gdf.total_bounds  # [minx, miny, maxx, maxy]
+    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+
+    m = _add_utilisation_legend(m)
+    folium.LayerControl(collapsed=False).add_to(m)
+
+    # Side-by-side: how full the centres are (left) vs. where the underlying
+    # regional demand sits (right), so the two can be read against each other.
+    col_util, col_demand = st.columns(2)
+
+    with col_util:
+        st.markdown("**How full is each existing CDC today?**")
+        # This is the selection map: its clickable proposed (blue) sites drive
+        # the site choice at the bottom of the page, so its result is returned.
+        result = st_folium(m, use_container_width=True, key="utilisation_map")
+
+    with col_demand:
+        st.markdown("**Where is the regional demand? (population aged 50-84)**")
+        demand_m = _build_regional_demand_map()
+        st_folium(demand_m, use_container_width=True, key="utilisation_demand_map")
+        st.caption(
+            "Darker areas have more people aged 50-84 - the group most likely to "
+            "need CDC services. The white markers are for reference only; make your "
+            "site choice on the left-hand map."
+        )
+
+    # View the numbers behind the utilisation map (site_utilisation_summary()).
+    display = summary.reset_index().rename(
+        columns={
+            "site": "CDC",
+            "capacity": "Weekly capacity",
+            "current_load": "Weekly caseload",
+            "utilisation_ratio": "Utilisation",
+            "headroom": "Spare capacity / week",
+        }
+    )
+    display["Utilisation"] = (display["Utilisation"] * 100).round(0).astype(int).astype(
+        str
+    ) + "%"
+    st.markdown("**Utilisation of each existing CDC**")
+    st.dataframe(display, hide_index=True, use_container_width=True)
+    st.caption(
+        "Utilisation = weekly caseload ÷ weekly capacity."
+        "A value over 100% means the site is running beyond its planned capacity."
+    )
+
+    return result
+
+
+def _build_regional_demand_map():
+    """Compact demand choropleth (population aged 50-84 per LSOA) with the
+    existing/proposed CDCs overlaid, for the utilisation page's second column.
+    Mirrors render_demand_map() but with no age-range toggle and returns the
+    folium map instead of calling st_folium (the caller renders it)."""
+    demand_gdf = create_demand_gdf()
+
+    demand_m = demand_gdf.explore(
+        column="MF50-84",
+        tooltip=["LSOA21NM", "MF50-84", "Total"],
+        tooltip_kwds={
+            "aliases": [
+                "Area:",
+                "Population 50-84:",
+                "Total population:",
+            ],
+            "labels": True,
+            "sticky": False,
+        },
+        name="Population 50-84",
+        zoom_start=9,
+        scheme="Percentiles",
+    )
+
+    # Sites here are context only - existing CDCs white, proposed CDCs grey (both
+    # deliberately clear of the green->red utilisation ramp on the left map) so it
+    # reads as "you can't pick here". Site selection happens on the left map.
+    sites_gdf = load_devon_sites()
+    reference_group = folium.FeatureGroup(name="CDCs (reference only)")
+    for _, row in sites_gdf.iterrows():
+        existing = row["Existing"] == "Yes"
+        folium.Marker(
+            location=[row.geometry.y, row.geometry.x],
+            popup=row["Facility_Name"],
+            tooltip=f"{row['Facility_Name']} — choose your site on the left-hand map",
+            # Dark glyph so the white (existing) pin stays legible over the choropleth.
+            icon=folium.Icon(
+                icon="plus",
+                prefix="fa",
+                color="white" if existing else "gray",
+                icon_color="#333333",
+            ),
+        ).add_to(reference_group)
+    reference_group.add_to(demand_m)
+
+    demand_m = _add_reference_site_legend(demand_m)
+    folium.LayerControl(collapsed=False).add_to(demand_m)
+
+    return demand_m
+
+
+def _add_reference_site_legend(m):
+    legend_html = """
+    <div class="ref-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 200px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>CDC sites</b><br>
+    <span style="display:inline-block;width:12px;height:12px;background:white;
+    border:1px solid #777;vertical-align:middle;"></span> Existing CDC<br>
+    <span style="display:inline-block;width:12px;height:12px;background:gray;
+    border:1px solid #777;vertical-align:middle;"></span> Proposed CDC<br>
+    <span style="font-size:11px;color:#555;">Shown for reference only —
+    choose your site on the left-hand map.</span>
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .ref-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
+
+
+def _add_utilisation_legend(m):
+    legend_html = """
+    <div class="util-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 210px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>CDC Utilisation</b><br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#1a9850;border:1px solid #333;"></span>
+    Spare capacity (&le;50%)<br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#fee08b;border:1px solid #333;"></span>
+    Getting busy (~75%)<br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#d73027;border:1px solid #333;"></span>
+    At / over capacity (&ge;100%)<br>
+    <span style="margin-top:4px;display:inline-block;"></span>
+    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
+    <br><span style="font-size:11px;color:#555;">Larger circle = busier site</span>
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .util-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
 
 
 ###########################
