@@ -12,7 +12,7 @@ from lokigi.site import SiteProblem
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
-MAXIMUM_BRIEFINGS = 5
+MAXIMUM_BRIEFINGS = 6
 
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
@@ -392,11 +392,14 @@ def investigation_button(investigation: Investigation) -> None:
     else:
         streamlit_icon = f":material/{investigation.icon}:"
 
+        # Once the analyst's briefing budget is spent, every remaining choice is
+        # greyed out (disabled) - the only way forward is to make a decision.
         if st.button(
             investigation.analyst_prompt,
             key=button_key,
             icon=streamlit_icon,
             use_container_width=True,
+            disabled=capacity_exhausted(),
         ):
             record_page_visited(investigation)
             st.switch_page(investigation.page)
@@ -410,6 +413,8 @@ def render_navigation(current: Investigation) -> None:
     Render the full navigation section for a given investigation page.
     Call once at the bottom of each page after content.
     """
+    render_capacity_status()
+
     st.subheader("Recommended next steps")
     for inv_id in current.recommended_next:
         if inv_id in ALL_INVESTIGATIONS:
@@ -517,7 +522,7 @@ def crt_filter_component(
 
 ANALYST_CAPACITY_MESSAGES = [
     {
-        "analyses_remaining": 5,
+        "analyses_remaining": 6,
         "message": (
             "Your analyst appears enthusiastic and optimistic. "
             "They have several coloured pens, a fresh notebook, and "
@@ -525,9 +530,14 @@ ANALYST_CAPACITY_MESSAGES = [
         ),
     },
     {
-        "analyses_remaining": 4,
+        "analyses_remaining": 5,
         "message": "Your analyst appears a little less bright-eyed and bushy-tailed than when you"
         "first met them. Their coffee cup does not leave their sight.",
+    },
+    {
+        "analyses_remaining": 4,
+        "message": "Your analyst now appears to have upgraded to a hat with two coffee cups atttached and a straw."
+        "You make a note to review the coffee budget for the data department.",
     },
     {
         "analyses_remaining": 3,
@@ -548,6 +558,61 @@ ANALYST_CAPACITY_MESSAGES = [
         "in Scotland during meetings. It may be prudent to reach a decision soon.",
     },
 ]
+
+
+def analyses_used() -> int:
+    """How many of the analyst's briefings have been spent so far.
+
+    Each unique evidence page the user visits costs one briefing (see
+    ``record_page_visited`` - revisits are free).
+    """
+    return len(st.session_state.pages_visited)
+
+
+def analyses_remaining() -> int:
+    """How many briefings the analyst can still provide."""
+    return MAXIMUM_BRIEFINGS - analyses_used()
+
+
+def capacity_exhausted() -> bool:
+    """True once every briefing has been spent."""
+    return analyses_remaining() <= 0
+
+
+def _capacity_message(remaining: int) -> str | None:
+    """The analyst flavour text for a given number of remaining briefings."""
+    for entry in ANALYST_CAPACITY_MESSAGES:
+        if entry["analyses_remaining"] == remaining:
+            return entry["message"]
+    return None
+
+
+def render_capacity_status() -> None:
+    """Tell the user how many briefings they can still request.
+
+    Uses the flavour text in ``ANALYST_CAPACITY_MESSAGES`` and escalates the
+    styling (info -> warning -> error) as the budget runs down.
+    """
+    remaining = analyses_remaining()
+
+    if remaining <= 0:
+        st.error(
+            f"Your analyst is out of capacity - all {MAXIMUM_BRIEFINGS} briefings "
+            "have been used. You can no longer request new information, so it is "
+            "time to make your decision.",
+            icon=":material/hourglass_disabled:",
+        )
+        return
+
+    plural = "briefing" if remaining == 1 else "briefings"
+    header = f"You can request **{remaining}** more {plural}."
+    message = _capacity_message(remaining)
+    body = f"{header}\n\n{message}" if message else header
+
+    if remaining <= 2:
+        st.warning(body, icon=":material/hourglass_bottom:")
+    else:
+        st.info(body, icon=":material/hourglass_top:")
 
 
 def page_styling():

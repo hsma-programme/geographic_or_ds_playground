@@ -4,6 +4,7 @@ from app.utils import (
     write_terminal_html,
     investigation_button,
     MAXIMUM_BRIEFINGS,
+    render_capacity_status,
     write_crt_html,
     page_styling,
     TERMINAL_DEFAULT_SPEED,
@@ -67,6 +68,8 @@ with colb:
 if reveal_speed != 0:
     typing_duration = (char_count * reveal_speed) / 1000
     time.sleep(typing_duration)
+
+render_capacity_status()
 
 col1, col2, col3 = st.columns(3)
 
