@@ -4,6 +4,7 @@ from app.utils import (
     write_terminal_html,
     SITE_SELECTION_SUBMITTABLE,
     load_devon_sites,
+    NOTES_STATE_KEY,
 )
 
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
@@ -33,6 +34,13 @@ if not st.session_state.site_submitted_final:
 
     devon_sites = load_devon_sites()
     selectable_sites = devon_sites[devon_sites["Existing"] == "No"]
+
+    notes = st.session_state.get(NOTES_STATE_KEY, "").strip()
+    if notes:
+        st.write("<br>", unsafe_allow_html=True)
+        st.markdown("**The notes you gathered as you explored the evidence:**")
+        # Preserve the user's line breaks when rendering as markdown.
+        st.info(notes.replace("\n", "  \n"))
 
     st.write("<br><br>", unsafe_allow_html=True)
 

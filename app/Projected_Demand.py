@@ -3,6 +3,7 @@ from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
+    render_notes_textbox,
 )
 from app.utils_investigations import PROJECTED_DEMAND
 from app.maps import render_projected_demand_map, make_selection_map
@@ -35,6 +36,8 @@ projected_demand_selection_map = make_selection_map(
     render_projected_demand_map, "projected_demand"
 )
 projected_demand_selection_map()
+
+render_notes_textbox()
 
 if st.session_state.site_submitted_projected_demand:
     render_navigation(PROJECTED_DEMAND)

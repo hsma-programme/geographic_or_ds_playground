@@ -4,6 +4,7 @@ from app.utils import (
     write_terminal_html,
     page_styling,
     select_site_from_current_evidence,
+    render_notes_textbox,
 )
 from app.utils_investigations import DEMAND
 from app.maps import render_demand_map, make_selection_map
@@ -34,6 +35,8 @@ st.iframe("app/assets/terminal_working/demand.html", height=300)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")
 demand_selection_map()
+
+render_notes_textbox()
 
 if st.session_state.site_submitted_demand:
     render_navigation(DEMAND)

@@ -45,7 +45,7 @@ select_map = make_selection_map(render_deprivation_map, "deprivation")
 select_map()
 
 
-render_notes_textbox(key="deprivation")
+render_notes_textbox()
 
 if st.session_state.site_submitted_deprivation:
     render_navigation(DEPRIVATION)

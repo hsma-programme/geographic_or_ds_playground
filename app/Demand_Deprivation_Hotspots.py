@@ -5,6 +5,7 @@ from app.utils import (
     write_terminal_html,
     page_styling,
     load_demand_deprivation_hotspots,
+    render_notes_textbox,
 )
 from app.utils_investigations import HOTSPOTS_DEMAND_DEPRIVATION
 from app.maps import render_demand_deprivation_hotspots_maps, make_selection_map
@@ -40,6 +41,8 @@ hotspots_selection_map = make_selection_map(
     "demand_deprivation_hotspots",
 )
 hotspots_selection_map()
+
+render_notes_textbox()
 
 if st.session_state.site_submitted_demand_deprivation_hotspots:
     render_navigation(HOTSPOTS_DEMAND_DEPRIVATION)

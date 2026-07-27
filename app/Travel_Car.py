@@ -7,6 +7,7 @@ from app.utils import (
     load_population_weighted_centroids,
     TERMINAL_DEFAULT_SPEED,
     write_terminal_html,
+    render_notes_textbox,
 )
 from app.utils_investigations import TRAVEL_CAR
 from app.maps import render_travel_maps, make_selection_map
@@ -63,6 +64,8 @@ car_travel_selection_map = make_selection_map(
     partial(render_travel_maps, best_solution_gdf), "car_travel"
 )
 car_travel_selection_map()
+
+render_notes_textbox()
 
 if st.session_state.site_submitted_car_travel:
     render_navigation(TRAVEL_CAR)

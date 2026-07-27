@@ -44,7 +44,7 @@ sfca_car_selection_map = make_selection_map(
 )
 sfca_car_selection_map()
 
-render_notes_textbox(key="2sfca_car")
+render_notes_textbox()
 
 if st.session_state.site_submitted_2sfca_car:
     render_navigation(TWO_SFCA_CAR)

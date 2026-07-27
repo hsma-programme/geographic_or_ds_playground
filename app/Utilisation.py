@@ -35,7 +35,7 @@ st.iframe("app/assets/terminal_working/utilisation.html", height=400)
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")
 utilisation_selection_map()
 
-render_notes_textbox(key="utilisation")
+render_notes_textbox()
 
 if st.session_state.site_submitted_utilisation:
     render_navigation(UTILISATION)

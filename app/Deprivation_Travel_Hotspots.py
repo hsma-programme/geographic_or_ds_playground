@@ -5,6 +5,7 @@ from app.utils import (
     write_terminal_html,
     page_styling,
     load_deprivation_travel_hotspots,
+    render_notes_textbox,
 )
 from app.utils_investigations import HOTSPOTS_DEPRIVATION_TRAVEL
 from app.maps import render_deprivation_travel_hotspots_maps, make_selection_map
@@ -40,6 +41,8 @@ hotspots_selection_map = make_selection_map(
     "deprivation_travel_hotspots",
 )
 hotspots_selection_map()
+
+render_notes_textbox()
 
 if st.session_state.site_submitted_deprivation_travel_hotspots:
     render_navigation(HOTSPOTS_DEPRIVATION_TRAVEL)

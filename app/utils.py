@@ -712,13 +712,45 @@ def setup_lokigi_site_problem_2sfca_pt():
     return _setup_lokigi_site_problem_2sfca(load_pt_travel_matrix())
 
 
-def render_notes_textbox(key):
+# A single, shared notepad follows the user across every evidence page. The
+# durable copy lives under a plain (non-widget) session-state key - Streamlit
+# clears widget-scoped state whenever a widget isn't rendered on the previous
+# run, which happens every time the user changes page, so the text area itself
+# cannot be relied on to persist. Instead the widget writes into the durable key
+# via its on_change callback, and is re-seeded from it on every run.
+NOTES_STATE_KEY = "user_notes"
+_NOTES_WIDGET_KEY = "_user_notes_widget"
+
+
+def _persist_notes():
+    st.session_state[NOTES_STATE_KEY] = st.session_state[_NOTES_WIDGET_KEY]
+
+
+def render_notes_textbox(key=None):
+    """Render the running notepad that follows the user from page to page.
+
+    All evidence pages share one notepad (``st.session_state["user_notes"]``),
+    so notes written on earlier pages are already present here.
+
+    ``key`` is accepted for backwards compatibility with existing call sites but
+    is no longer used to scope the notes - all pages share one notepad.
+    """
+    st.session_state.setdefault(NOTES_STATE_KEY, "")
+
     st.subheader("Write down any additional thoughts you have.")
-    st.caption("These will be saved to your notes.")
+    st.caption(
+        "These notes follow you from page to page, so you can build up your "
+        "thinking as you go."
+    )
+
+    # Re-seed the widget from the durable copy every run (see note above), then
+    # let its on_change callback write any edits straight back into it.
+    st.session_state[_NOTES_WIDGET_KEY] = st.session_state[NOTES_STATE_KEY]
     st.text_area(
         label="Your Thoughts",
         label_visibility="hidden",
-        key=f"additional_thoughts_{key}",
+        key=_NOTES_WIDGET_KEY,
+        on_change=_persist_notes,
     )
 
     st.write("")

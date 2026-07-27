@@ -44,7 +44,7 @@ sfca_pt_selection_map = make_selection_map(
 )
 sfca_pt_selection_map()
 
-render_notes_textbox(key="2sfca_pt")
+render_notes_textbox()
 
 if st.session_state.site_submitted_2sfca_pt:
     render_navigation(TWO_SFCA_PT)

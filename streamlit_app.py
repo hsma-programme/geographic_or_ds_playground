@@ -20,6 +20,10 @@ for state in states:
 if "pages_visited" not in st.session_state:
     st.session_state.pages_visited = []
 
+# A single shared notepad that follows the user across every evidence page.
+if "user_notes" not in st.session_state:
+    st.session_state.user_notes = ""
+
 if "homepage_visited" not in st.session_state:
     st.session_state.homepage_visited = False
 
