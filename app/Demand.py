@@ -30,7 +30,7 @@ char_count, reveal_speed = write_terminal_html(
     output_path="app/assets/terminal_working/demand.html",
 )
 
-st.iframe("app/assets/terminal_working/demand.html", height=275)
+st.iframe("app/assets/terminal_working/demand.html", height=300)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")
 demand_selection_map()

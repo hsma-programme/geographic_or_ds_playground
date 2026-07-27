@@ -11,8 +11,11 @@ page_styling()
 
 st.title("Optimise")
 
-# TODO: HARDCODED for development purposes
-selected_site = "Okehampton - Exeter Road Industrial Estate"
+if st.session_state.confirmed_site_final is not None:
+    selected_site = st.session_state.confirmed_site_final
+else:
+    st.error("No site selected. Falling back to default.")
+    selected_site = "Tiverton - Lowman Way"
 
 
 def get_gif_duration(filename):
@@ -42,16 +45,18 @@ existing_sites = existing_sites[existing_sites["Existing"] == "Yes"][
 ].to_list()
 
 st.info(
-    f"You selected {selected_site} as the best solution.\n\nDoes the optimiser agree?"
+    f"You selected {selected_site} as the best overall solution.\n\nDoes the optimiser agree?"
 )
 
 run = st.button("Click here to run the optimiser")
+
+status = st.empty()
 
 if run:
     with st.spinner("The optimiser is starting up..."):
         time.sleep(3)
 
-    st.write("The optimiser is evaluating all possible combinations of 5 sites")
+    status.write("The optimiser is evaluating all possible combinations of 5 sites")
 
     duration = get_gif_duration(gif_path)
 
@@ -71,6 +76,8 @@ if run:
         f"Based on the impact on weighted average travel time alone, the optimiser finds the best additional site to be {best_additional[0]}."
     )
 
+    status.write("")
+
     solution_df_display = (
         solution.solution_df.copy()
         .drop(columns=["site_indices", "problem_df"])
@@ -82,64 +89,6 @@ if run:
     )
 
     solution_df_display = solution_df_display.drop(columns="site_names")
-
-    st.dataframe(
-        solution_df_display,
-        hide_index=True,
-        column_order=[
-            "solution_rank",
-            "site",
-            "weighted_average",
-            "unweighted_average",
-            "90th_percentile",
-            "max",
-            "proportion_within_coverage_threshold",
-            "inter_tertile_ratio",
-            "avg_lower_third_bins",
-            "avg_upper_third_bins",
-        ],
-        column_config={
-            "solution_rank": st.column_config.NumberColumn(
-                "Rank",
-                format="%d",
-            ),
-            "site": st.column_config.TextColumn(
-                "Site(s)",
-            ),
-            "weighted_average": st.column_config.NumberColumn(
-                "Weighted average (mins)",
-                format="%.1f",
-            ),
-            "unweighted_average": st.column_config.NumberColumn(
-                "Average (mins)",
-                format="%.1f",
-            ),
-            "90th_percentile": st.column_config.NumberColumn(
-                "90th percentile (mins)",
-                format="%.1f",
-            ),
-            "max": st.column_config.NumberColumn(
-                "Maximum (mins)",
-                format="%.1f",
-            ),
-            "proportion_within_coverage_threshold": st.column_config.NumberColumn(
-                "Coverage (%)",
-                format="%.1f",
-            ),
-            "inter_tertile_ratio": st.column_config.NumberColumn(
-                "Inter-tertile ratio",
-                format="%.2f",
-            ),
-            "avg_lower_third_bins": st.column_config.NumberColumn(
-                "Average Car Travel (lowest third)",
-                format="%.1f",
-            ),
-            "avg_upper_third_bins": st.column_config.NumberColumn(
-                "Average Car Travel (highest third)",
-                format="%.1f",
-            ),
-        },
-    )
 
     def ordinal(n: int) -> str:
         """Convert an integer to its ordinal representation."""
@@ -205,46 +154,161 @@ Your solution is the:
 - **{maximum}** best in terms of maximum car travel time.
 - **{coverage}** best in terms of the demand covered within 30 minutes of a site by car.
 """)
-
-    st.subheader("Comparing the best solutions across multiple metrics")
-
-    metrics = [
-        ParetoMetric(
-            column="weighted_average",
-            direction="lower_better",
-            label="weighted average travel time",
-            unit="minutes",
-        ),
-        ParetoMetric(
-            column="max",
-            direction="lower_better",
-            label="maximum travel time",
-            unit="minutes",
-        ),
-        ParetoMetric(
-            column="proportion_within_coverage_threshold",
-            direction="higher_better",
-            label="proportion within coverage threshold",
-        ),
-        ParetoMetric(
-            column="inter_tertile_ratio",
-            direction="lower_better",
-            label="ratio of weighted travel times in IMD 1-3 to IMD 7-10",
-        ),
-        ParetoMetric(
-            column="avg_lower_third_bins",
-            direction="lower_better",
-            label="average travel time for those in IMD 1-3",
-            unit="minutes",
-        ),
-    ]
-
-    solution.compute_pareto_front(metrics=metrics)
-
-    st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
-
-    st.caption(
-        "An inter-tertile ratio of below 1 means those in IMD 1-3 (most deprived) have a shorter travel time on average than those in IMD 7-10 (least deprived)"
+    tab_1, tab_2, tab_3, tab_4 = st.tabs(
+        [
+            "Solution Comparison",
+            "Multi-objective Overview",
+            "Multi-objective Breakdown",
+            "Solution Breakdown",
+        ]
     )
 
-    st.pyplot(solution.plot_pareto_facets())
+    with tab_1:
+
+        @st.fragment
+        def plot_best_sols():
+            rank_on = st.radio(
+                "Rank On...",
+                [
+                    "weighted_average",
+                    "unweighted_average",
+                    "90th_percentile",
+                    "max",
+                    "proportion_within_coverage_threshold",
+                    "inter_tertile_ratio",
+                ],
+                horizontal=True,
+            )
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader(f"Best Solution Based on {rank_on}")
+                ax = solution.plot_best_combination(
+                    solution_rank=1,
+                    rank_on=rank_on,
+                    plot_regions_not_meeting_threshold=True
+                    if rank_on == "proportion_within_coverage_threshold"
+                    else False,
+                )
+                st.pyplot(ax.figure)
+            with col2:
+                st.subheader("Your Selected Solution")
+                ax = solution.plot_best_combination(
+                    solution_rank=get_solution_rank(
+                        solution_df_display,
+                        selected_site,
+                        rank_on,
+                        ascending=True,
+                    ),
+                    plot_regions_not_meeting_threshold=True
+                    if rank_on == "proportion_within_coverage_threshold"
+                    else False,
+                    rank_on=rank_on,
+                )
+                st.pyplot(ax.figure)
+
+        plot_best_sols()
+
+    with tab_4:
+        st.dataframe(
+            solution_df_display,
+            hide_index=True,
+            column_order=[
+                "solution_rank",
+                "site",
+                "weighted_average",
+                "unweighted_average",
+                "90th_percentile",
+                "max",
+                "proportion_within_coverage_threshold",
+                "inter_tertile_ratio",
+                "avg_lower_third_bins",
+                "avg_upper_third_bins",
+            ],
+            column_config={
+                "solution_rank": st.column_config.NumberColumn(
+                    "Rank",
+                    format="%d",
+                ),
+                "site": st.column_config.TextColumn(
+                    "Site(s)",
+                ),
+                "weighted_average": st.column_config.NumberColumn(
+                    "Weighted average (mins)",
+                    format="%.1f",
+                ),
+                "unweighted_average": st.column_config.NumberColumn(
+                    "Average (mins)",
+                    format="%.1f",
+                ),
+                "90th_percentile": st.column_config.NumberColumn(
+                    "90th percentile (mins)",
+                    format="%.1f",
+                ),
+                "max": st.column_config.NumberColumn(
+                    "Maximum (mins)",
+                    format="%.1f",
+                ),
+                "proportion_within_coverage_threshold": st.column_config.NumberColumn(
+                    "Coverage (%)",
+                    format="%.1f",
+                ),
+                "inter_tertile_ratio": st.column_config.NumberColumn(
+                    "Inter-tertile ratio",
+                    format="%.2f",
+                ),
+                "avg_lower_third_bins": st.column_config.NumberColumn(
+                    "Average Car Travel (lowest third)",
+                    format="%.1f",
+                ),
+                "avg_upper_third_bins": st.column_config.NumberColumn(
+                    "Average Car Travel (highest third)",
+                    format="%.1f",
+                ),
+            },
+        )
+
+    with tab_2:
+        st.subheader("Comparing the best solutions across multiple metrics")
+
+        metrics = [
+            ParetoMetric(
+                column="weighted_average",
+                direction="lower_better",
+                label="weighted average travel time",
+                unit="minutes",
+            ),
+            ParetoMetric(
+                column="max",
+                direction="lower_better",
+                label="maximum travel time",
+                unit="minutes",
+            ),
+            ParetoMetric(
+                column="proportion_within_coverage_threshold",
+                direction="higher_better",
+                label="proportion within coverage threshold",
+            ),
+            ParetoMetric(
+                column="inter_tertile_ratio",
+                direction="lower_better",
+                label="ratio of weighted travel times in IMD 1-3 to IMD 7-10",
+            ),
+            ParetoMetric(
+                column="avg_lower_third_bins",
+                direction="lower_better",
+                label="average travel time for those in IMD 1-3",
+                unit="minutes",
+            ),
+        ]
+
+        solution.compute_pareto_front(metrics=metrics)
+
+        st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
+
+        st.caption(
+            "An inter-tertile ratio of below 1 means those in IMD 1-3 (most deprived) have a shorter travel time on average than those in IMD 7-10 (least deprived)"
+        )
+
+    with tab_3:
+        st.pyplot(solution.plot_pareto_facets())

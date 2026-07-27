@@ -19,9 +19,9 @@ intro_text = """
 <br><br>
 > They suggest you switch between "Projected Growth", "Projected 50-84 Population", and "Projected Total Population" using the options above the map to see how the picture changes.
 <br><br>
-> They let you know that yellow is the highest value for whichever metric you've selected, and purple means lower. They mention that you can use the + and - buttons in the top left to zoom in and out.
+> They let you know that yellow is the highest value for whichever metric you've selected, and purple means lower.
 <br><br>
-> They then become pixellated and return to the cloud until they are next required. You wonder whether the site you'd choose today is still the right one for 2036.
+> You hear a sound you haven't heard for nearly twenty years - the dial-up tone. You realise it is coming from the analyst. You decide it is best not to question this and turn your attention to the map.
 """
 
 char_count, reveal_speed = write_terminal_html(
@@ -29,7 +29,7 @@ char_count, reveal_speed = write_terminal_html(
     output_path="app/assets/terminal_working/projected_demand.html",
 )
 
-st.iframe("app/assets/terminal_working/projected_demand.html", height=275)
+st.iframe("app/assets/terminal_working/projected_demand.html", height=375)
 
 projected_demand_selection_map = make_selection_map(
     render_projected_demand_map, "projected_demand"
