@@ -1,6 +1,5 @@
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import geopandas
 import html
 from app.utils_investigations import ALL_INVESTIGATIONS, Investigation
@@ -651,25 +650,26 @@ def handle_scroll_to_top():
     nonce = st.session_state.get("_scroll_nonce", 0) + 1
     st.session_state["_scroll_nonce"] = nonce
 
-    components.html(
-        f"""
-        <script>
-            // {nonce}
-            const doc = window.parent.document;
-            const selectors = [
-                'section.main',
-                '[data-testid="stMain"]',
-                '[data-testid="stAppViewContainer"]',
-                '[data-testid="stMainBlockContainer"]',
-            ];
-            for (const sel of selectors) {{
-                const el = doc.querySelector(sel);
-                if (el) el.scrollTo({{top: 0, left: 0, behavior: "instant"}});
-            }}
-            window.parent.scrollTo({{top: 0, left: 0, behavior: "instant"}});
-        </script>
-        """,
-        height=0,
+    # st.iframe (Streamlit >=1.60) auto-detects the HTML string and replaces the
+    # deprecated st.components.v1.html.
+    st.iframe(
+        f"""<!DOCTYPE html>
+<html><body><script>
+    // {nonce}
+    const doc = window.parent.document;
+    const selectors = [
+        'section.main',
+        '[data-testid="stMain"]',
+        '[data-testid="stAppViewContainer"]',
+        '[data-testid="stMainBlockContainer"]',
+    ];
+    for (const sel of selectors) {{
+        const el = doc.querySelector(sel);
+        if (el) el.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+    }}
+    window.parent.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+</script></body></html>""",
+        height=1,
     )
 
 
