@@ -19,6 +19,8 @@ SITE_SELECTION_SUBMITTABLE = [
     "deprivation",
     "car_travel",
     "public_transport",
+    "2sfca_car",
+    "2sfca_pt",
     "utilisation",
     "projected_demand",
     "demand_deprivation_hotspots",
@@ -672,6 +674,42 @@ def setup_lokigi_site_problem_pt():
     )
 
     return lokigi_site_problem
+
+
+def _setup_lokigi_site_problem_2sfca(travel_matrix):
+    # 2SFCA needs the three ingredients the earlier pages showed separately:
+    # each existing site's capacity (supply), the population (demand, from BASE),
+    # and how far apart they are (a travel matrix). Only the four *existing* CDCs
+    # have capacity, so those are the sites we register. Proposed sites aren't
+    # built and contribute no supply; they're overlaid on the map for selection
+    # only, outside this lokigi problem.
+    lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
+
+    existing_sites = load_devon_sites_with_utilisation()
+    existing_sites = existing_sites[existing_sites["Existing"] == "Yes"]
+
+    lokigi_site_problem.add_sites(
+        existing_sites,
+        candidate_id_col="Facility_Name",
+        capacity_col="weekly_capacity",
+        current_load_col="weekly_caseload",
+    )
+
+    lokigi_site_problem.add_travel_matrix(
+        travel_matrix, unit="minutes", source_col="from_id"
+    )
+
+    return lokigi_site_problem
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_2sfca_car():
+    return _setup_lokigi_site_problem_2sfca(load_car_travel_matrix())
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_2sfca_pt():
+    return _setup_lokigi_site_problem_2sfca(load_pt_travel_matrix())
 
 
 def render_notes_textbox(key):

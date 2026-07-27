@@ -2,6 +2,7 @@ from app.utils import (
     create_demand_gdf,
     create_deprivation_gdf,
     create_projected_demand_gdf,
+    load_devon_geography,
     load_devon_sites,
     load_devon_sites_with_utilisation,
     load_population_weighted_centroids,
@@ -526,6 +527,162 @@ def _add_utilisation_legend(m):
         folium.Element("""
         <style>
         .util-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
+
+
+###########################
+# MARK: 2SFCA (Accessibility)
+###########################
+# The two-step floating catchment area (2SFCA) score answers a question the
+# earlier pages could only answer in pieces: "how much CDC capacity is realistically
+# available to the people who live here?" It combines three things at once - how
+# much capacity each site has, how many people compete for that capacity, and how
+# far away it is. The pay-off for the teaching narrative is that two areas with an
+# identical travel time to their nearest CDC can still score very differently if one
+# of them shares that CDC with far more people.
+_ACCESS_SCALE = 1000  # express accessibility as weekly slots per 1,000 residents
+
+
+def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
+    """Render the 2SFCA accessibility choropleth for one travel mode.
+
+    `problem` is a lokigi SiteProblem with the existing CDCs (capacity) and the
+    relevant travel matrix already loaded. `mode_key` ("car"/"pt") only namespaces
+    the widget keys. Returns the st_folium result so the proposed (blue) markers can
+    still drive the site selection at the bottom of the page.
+    """
+    catchment_size = st.radio(
+        "How far are people assumed to be willing to travel to reach a CDC?",
+        catchment_options,
+        format_func=lambda m: f"Within {m} minutes",
+        index=catchment_options.index(default_catchment),
+        horizontal=True,
+        key=f"2sfca_catchment_{mode_key}",
+    )
+
+    # Step 1 (site ratios) + step 2 (per-area accessibility) in one call.
+    region_df, site_df = problem.two_step_floating_catchment(
+        supply_col="weekly_capacity",
+        catchment_size=catchment_size,
+        return_site_ratios=True,
+    )
+
+    # Raw accessibility is supply-per-person-per-week (tiny numbers); scale to
+    # "weekly slots per 1,000 residents" so the legend and tooltips read sensibly.
+    region_df = region_df.copy()
+    region_df["access_scaled"] = region_df["accessibility"] * _ACCESS_SCALE
+
+    gdf = load_devon_geography().merge(
+        region_df.reset_index(), left_on="LSOA21NM", right_on="LSOA 2021 Name"
+    )
+
+    # Green = well-served, red = underserved (deepest red = no CDC within the limit),
+    # so the areas that most need a new site jump out.
+    m = gdf.explore(
+        column="access_scaled",
+        cmap="RdYlGn",
+        tooltip=["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"],
+        tooltip_kwds={
+            "aliases": [
+                "Area:",
+                "Weekly slots per 1,000 residents:",
+                "CDCs reachable within limit:",
+                "Population 50-84:",
+            ],
+            "labels": True,
+            "sticky": False,
+        },
+        name="Accessibility (2SFCA)",
+        zoom_start=9,
+        scheme="Percentiles",
+        # Default explore legend shows raw percentile-bin numbers; we replace it
+        # with a semantic gradient legend below (green = well served, red = not).
+        legend=False,
+    )
+
+    m = add_sites_to_map(m, sites_gdf=load_devon_sites())
+    m = _add_2sfca_legend(m)
+
+    result = st_folium(m, use_container_width=True, key=f"2sfca_{mode_key}_map")
+
+    st.caption(
+        "Greener areas have more CDC capacity available per resident once travel time "
+        "*and* competition from other patients are taken into account. Red areas are "
+        "the most underserved; the deepest red areas have no existing CDC within the "
+        "travel limit selected above at all."
+    )
+
+    # Site-level view: step 1 of the calculation - how stretched is each existing
+    # CDC once you count everyone who can reach it?
+    display = site_df.reset_index().rename(
+        columns={
+            "Facility_Name": "CDC",
+            "supply": "Weekly capacity",
+            "catchment_demand": "People 50-84 within reach",
+            "n_regions_in_catchment": "Areas within reach",
+        }
+    )
+    display["Slots per 1,000 people within reach"] = (
+        display["ratio"] * _ACCESS_SCALE
+    ).round(1)
+    display = display.drop(columns=["ratio"])
+    display["Weekly capacity"] = display["Weekly capacity"].round(0).astype(int)
+    display["People 50-84 within reach"] = (
+        display["People 50-84 within reach"].round(0).astype(int)
+    )
+    st.markdown("**How stretched is each existing CDC?**")
+    st.dataframe(display, hide_index=True, use_container_width=True)
+    st.caption(
+        "A CDC with plenty of capacity can still offer each person only a few slots if "
+        "a large population can reach it - so the areas that depend on it score poorly "
+        "for accessibility, even when the CDC is physically close by."
+    )
+
+    return result
+
+
+def _add_2sfca_legend(m):
+    # A semantic legend for the choropleth: rather than the raw percentile-bin
+    # numbers explore would print, show the green->red ramp with what it means,
+    # plus the CDC site markers, in a single box.
+    legend_html = """
+    <div class="sfca-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 235px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>How well-served is each area?</b><br>
+    <span style="font-size:11px;color:#555;">Weekly CDC capacity within reach,
+    per resident (2SFCA)</span>
+    <div style="height:12px;margin:6px 0 2px 0;border:1px solid #333;
+        background:linear-gradient(to right,#a50026,#fee08b,#1a9850);"></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span>Underserved</span><span>Well served</span>
+    </div>
+    <span style="font-size:11px;color:#555;">Darkest red areas cannot reach any
+    CDC within the travel limit.</span>
+    <hr style="margin:8px 0;border:none;border-top:1px solid #ddd;">
+    <b>CDC sites</b><br>
+    <i class="fa fa-plus" style="color:red"></i> Existing CDC<br>
+    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .sfca-maplegend { color: black !important; }
         </style>
         """)
     )

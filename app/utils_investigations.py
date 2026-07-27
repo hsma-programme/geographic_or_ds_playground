@@ -146,41 +146,42 @@ HOTSPOTS_DEPRIVATION_TRAVEL = Investigation(
 # deleted (redundant with Travel_Car.py / Travel_Public_Transport.py, which already
 # show travel-time data). The Investigation entries for them are removed too.
 
-# 2-step floating catchment area is a genuinely distinct metric (demand vs. capacity
-# vs. travel), but its prerequisite chain below points at the now-deleted isochrones
-# investigations, so it's commented out rather than deleted. Before re-enabling: fix
-# `prerequisites`/`parent` (they still reference "isochrones_car"/"isochrones_pt"),
-# wire up real content, and re-add the matching st.Page(...) entries in
-# streamlit_app.py.
-# TWO_SFCA_CAR = Investigation(
-#     id="2sfca_car",
-#     title="Service availability - car",
-#     page="app/Catchment_2sfca_car.py",
-#     category=["accessibility"],
-#     prerequisites=["isochrones_car"],
-#     parent="isochrones_car",
-#     recommended_next=["travel_pt", "2sfca_pt"],
-#     analyst_prompt=(
-#         "Calculate the 2 step floating catchment area metric for car transport."
-#     ),
-#     is_entry_point=False,
-#     analyst_days=2,
-# )
-#
-# TWO_SFCA_PT = Investigation(
-#     id="2sfca_pt",
-#     title="Service availability - public transport",
-#     page="app/Catchment_2sfca_pt.py",
-#     category=["accessibility"],
-#     prerequisites=["isochrones_pt"],
-#     parent="isochrones_pt",
-#     recommended_next=["travel_car", "2sfca_car"],
-#     analyst_prompt=(
-#         "Calculate the 2 step floating catchment area metric for public transport."
-#     ),
-#     is_entry_point=False,
-#     analyst_days=2,
-# )
+# 2-step floating catchment area (2SFCA) is a genuinely distinct metric: it fuses
+# capacity, demand/competition and travel time into a single "how much service can
+# the people here actually reach" score. It builds directly on two earlier pages, so
+# both are prerequisites: the utilisation page (which introduces the capacity figures)
+# and the matching travel-time page (car here, public transport for the PT version).
+TWO_SFCA_CAR = Investigation(
+    id="2sfca_car",
+    title="Who can actually reach a CDC? (car)",
+    page="app/Catchment_2sfca_car.py",
+    category=["accessibility", "capacity"],
+    prerequisites=["utilisation", "travel_car"],
+    parent="utilisation",
+    recommended_next=["2sfca_pt", "travel_car"],
+    analyst_prompt=(
+        "Combine capacity, demand and car travel to show who can actually reach a CDC."
+    ),
+    is_entry_point=False,
+    analyst_days=3,
+    icon="directions_car",
+)
+
+TWO_SFCA_PT = Investigation(
+    id="2sfca_pt",
+    title="Who can actually reach a CDC? (public transport)",
+    page="app/Catchment_2sfca_pt.py",
+    category=["accessibility", "capacity"],
+    prerequisites=["utilisation", "travel_pt"],
+    parent="2sfca_car",
+    recommended_next=["2sfca_car", "travel_pt"],
+    analyst_prompt=(
+        "Recalculate who can reach a CDC when patients rely on public transport."
+    ),
+    is_entry_point=False,
+    analyst_days=4,
+    icon="directions_bus",
+)
 
 UTILISATION = Investigation(
     id="utilisation",
@@ -190,7 +191,7 @@ UTILISATION = Investigation(
     prerequisites=[],
     parent=None,
     is_entry_point=False,
-    recommended_next=["demand", "projected_demand", "travel_car"],
+    recommended_next=["2sfca_car", "demand", "projected_demand", "travel_car"],
     analyst_prompt="Show me how well-used the existing four CDCs are.",
     analyst_days=2,
 )
@@ -227,8 +228,8 @@ ALL_INVESTIGATIONS: dict[str, Investigation] = {
         HOTSPOTS_DEMAND_DEPRIVATION,
         HOTSPOTS_DEMAND_TRAVEL,
         HOTSPOTS_DEPRIVATION_TRAVEL,
-        # TWO_SFCA_CAR and TWO_SFCA_PT are commented out above - re-add here once
-        # they're re-enabled.
+        TWO_SFCA_CAR,
+        TWO_SFCA_PT,
         UTILISATION,
         PROJECTED_DEMAND,
     ]

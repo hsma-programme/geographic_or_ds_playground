@@ -75,19 +75,19 @@ pg = st.navigation(
             title="Where do high demand and high travel times intersect?",
             visibility="hidden",
         ),
-        # 2 step floating catchment area pages are commented out for now: their only
-        # prerequisite (the isochrones pages) has been removed, and 2SFCA needs
-        # utilisation/capacity data wiring before it can be shown as a real page.
-        # Re-enable once that path is built (see app/utils_investigations.py for the
-        # matching Investigation entries).
-        # st.Page(
-        #     "app/Catchment_2sfca_car.py",
-        #     title="Who is currently underserved? (car)",
-        # ),
-        # st.Page(
-        #     "app/Catchment_2sfca_pt.py",
-        #     title="Who is currently underserved? (public transport)",
-        # ),
+        # 2 step floating catchment area pages: fuse capacity, demand and travel
+        # into a single accessibility score. They depend on the utilisation page's
+        # capacity figures (see prerequisites in app/utils_investigations.py).
+        st.Page(
+            "app/Catchment_2sfca_car.py",
+            title="Who can actually reach a CDC? (car)",
+            visibility="hidden",
+        ),
+        st.Page(
+            "app/Catchment_2sfca_pt.py",
+            title="Who can actually reach a CDC? (public transport)",
+            visibility="hidden",
+        ),
         # Explore the utilisation of existing CDCs (capacity vs catchment)
         st.Page(
             "app/Utilisation.py",
