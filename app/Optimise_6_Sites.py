@@ -49,7 +49,16 @@ def get_gif_duration(filename):
 
 gif_path = "data/solution_car_6.gif"
 
-solution_df = pd.read_pickle("data/solution_car_6_best.pkl")
+
+# Cache the pickled solution dataframe so it loads once and is shared across
+# reruns and sessions instead of being re-read on every rerun. cache_data hands
+# each caller a copy, and the page copies before mutating anyway.
+@st.cache_data
+def load_car_6_solution_df():
+    return pd.read_pickle("data/solution_car_6_best.pkl")
+
+
+solution_df = load_car_6_solution_df()
 
 existing_sites = load_devon_sites()
 existing_sites = existing_sites[existing_sites["Existing"] == "Yes"][

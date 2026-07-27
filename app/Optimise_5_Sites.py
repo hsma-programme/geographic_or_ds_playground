@@ -34,8 +34,17 @@ def get_gif_duration(filename):
 
 gif_path = "data/solution_car_5.gif"
 
-with open("data/solution_car_5.pkl", "rb") as f:
-    solution = pickle.load(f)
+
+# Cache the ~2MB pickled solution object so it deserialises once and is shared
+# across reruns and sessions, instead of being unpickled on every rerun. The
+# page only reads from it (solution_df, ranking, plotting), so sharing is safe.
+@st.cache_resource
+def load_car_5_solution():
+    with open("data/solution_car_5.pkl", "rb") as f:
+        return pickle.load(f)
+
+
+solution = load_car_5_solution()
 
 # st.write(solution.show_solutions())
 
