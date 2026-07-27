@@ -12,11 +12,35 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import pandas as pd
+from shapely import set_precision
 
 
 ###########################
 # MARK: Helpers
 ###########################
+# Every choropleth below embeds its GeoDataFrame straight into the map HTML as
+# GeoJSON (that's how gdf.explore()/folium work), and st_folium ships that whole
+# payload to the browser. Two things bloat it needlessly:
+#   * explore() writes each vertex at full float64 precision (~18 sig figs), far
+#     finer than the Devon-wide zoom can show, and
+#   * explore() embeds *every* column of the frame into each feature's
+#     properties, even the columns no tooltip ever displays.
+# _slim_for_map() strips both: it keeps only the columns actually drawn/tooltipped
+# and rounds coordinates to 5 dp (~1 m). This is display-only - all analysis is
+# keyed on LSOA name, not geometry, so no numeric result changes. Rounding is
+# topology-safe: grid-snapping is deterministic, so a vertex shared by two
+# neighbouring LSOAs snaps to the same point in both and their border stays
+# coincident (no slivers, unlike per-polygon simplification).
+def _slim_for_map(gdf, keep_cols):
+    """Return a display-only copy of ``gdf`` in EPSG:4326 with only ``keep_cols``
+    (plus geometry) retained and coordinates rounded to ~1 m, to shrink the map
+    HTML embedded by ``.explore()``. Order-preserving and duplicate-safe."""
+    geom_name = gdf.geometry.name
+    ordered = list(dict.fromkeys([c for c in keep_cols if c != geom_name]))
+    slim = gdf[[*ordered, geom_name]].to_crs("EPSG:4326").copy()
+    slim[geom_name] = set_precision(slim[geom_name].values, grid_size=1e-5)
+    return slim
+
 def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
     existing_sites = sites_gdf[sites_gdf["Existing"] == "Yes"]
     proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
@@ -112,12 +136,13 @@ def render_deprivation_map():
     deprivation_gdf = create_deprivation_gdf()
     sites_gdf = load_devon_sites()
 
+    imd_col = "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
     # Create choropleth
-    m = deprivation_gdf.explore(
-        column="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+    m = _slim_for_map(deprivation_gdf, ["LSOA21NM", imd_col]).explore(
+        column=imd_col,
         tooltip=[
             "LSOA21NM",
-            "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+            imd_col,
         ],
         tooltip_kwds={
             "aliases": [
@@ -178,7 +203,9 @@ def render_demand_map():
         index=0,
     )
     # Create choropleth
-    m = demand_gdf.explore(
+    m = _slim_for_map(
+        demand_gdf, ["LSOA21NM", selected_age_range, "Total"]
+    ).explore(
         column=selected_age_range,
         tooltip=[
             "LSOA21NM",
@@ -244,7 +271,9 @@ def render_projected_demand_map():
             tooltip_aliases.append(alias)
 
     # Create choropleth
-    m = projected_gdf.explore(
+    m = _slim_for_map(
+        projected_gdf, [selected_metric, *tooltip_columns]
+    ).explore(
         column=selected_metric,
         tooltip=tooltip_columns,
         tooltip_kwds={
@@ -414,7 +443,9 @@ def _build_regional_demand_map():
     folium map instead of calling st_folium (the caller renders it)."""
     demand_gdf = create_demand_gdf()
 
-    demand_m = demand_gdf.explore(
+    demand_m = _slim_for_map(
+        demand_gdf, ["LSOA21NM", "MF50-84", "Total"]
+    ).explore(
         column="MF50-84",
         tooltip=["LSOA21NM", "MF50-84", "Total"],
         tooltip_kwds={
@@ -582,7 +613,9 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
 
     # Green = well-served, red = underserved (deepest red = no CDC within the limit),
     # so the areas that most need a new site jump out.
-    m = gdf.explore(
+    m = _slim_for_map(
+        gdf, ["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"]
+    ).explore(
         column="access_scaled",
         cmap="RdYlGn",
         tooltip=["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"],
@@ -734,7 +767,10 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
 
             cmap = ListedColormap(["#67a9cf", "#ef8a62"])
 
-    m = best_solution_gdf.round(1).explore(
+    m = _slim_for_map(
+        best_solution_gdf.round(1),
+        [column, "LSOA21NM", "min_cost", "selected_site"],
+    ).explore(
         column=column,
         tooltip=["LSOA21NM", "min_cost", "selected_site"],
         tooltip_kwds={
@@ -880,7 +916,7 @@ def _render_hotspots_map(
     gdf[column] = pd.Categorical(gdf[column], categories=present, ordered=True)
     cmap = ListedColormap([colour_map[c] for c in present])
 
-    m = gdf.round(3).explore(
+    m = _slim_for_map(gdf.round(3), [column, *tooltip]).explore(
         column=column,
         categorical=True,
         cmap=cmap,
