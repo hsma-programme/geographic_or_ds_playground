@@ -44,26 +44,36 @@ for i in SITE_SELECTION_SUBMITTABLE:
 
 pg = st.navigation(
     [
-        st.Page("app/Homepage.py", title="Welcome!"),
-        st.Page("app/Demand.py", title="Where is our demand?"),
-        st.Page("app/Deprivation.py", title="Where is there high need?"),
+        st.Page("app/Homepage.py", title="Welcome!", visibility="hidden"),
+        st.Page("app/Demand.py", title="Where is our demand?", visibility="hidden"),
+        st.Page(
+            "app/Deprivation.py", title="Where is there high need?", visibility="hidden"
+        ),
         st.Page(
             "app/Demand_Deprivation_Hotspots.py",
             title="Where do areas of both high demand and high deprivation occur?",
+            visibility="hidden",
         ),
         # Transport pages without cross-border travel to nearest CDCs
-        st.Page("app/Travel_Car.py", title="What does travel by car look like now?"),
+        st.Page(
+            "app/Travel_Car.py",
+            title="What does travel by car look like now?",
+            visibility="hidden",
+        ),
         st.Page(
             "app/Travel_Public_Transport.py",
             title="What does travel by public transport look like now?",
+            visibility="hidden",
         ),
         st.Page(
             "app/Deprivation_Travel_Hotspots.py",
             title="Where do high deprivation and high travel times intersect?",
+            visibility="hidden",
         ),
         st.Page(
             "app/Demand_Travel_Hotspots.py",
             title="Where do high demand and high travel times intersect?",
+            visibility="hidden",
         ),
         # 2 step floating catchment area pages are commented out for now: their only
         # prerequisite (the isochrones pages) has been removed, and 2SFCA needs
@@ -79,20 +89,34 @@ pg = st.navigation(
         #     title="Who is currently underserved? (public transport)",
         # ),
         # Explore the utilisation of existing CDCs (capacity vs catchment)
-        st.Page("app/Utilisation.py", title="How well-used are existing CDCs?"),
+        st.Page(
+            "app/Utilisation.py",
+            title="How well-used are existing CDCs?",
+            visibility="hidden",
+        ),
         # Display projected demand
         st.Page(
-            "app/Projected_Demand.py", title="Where will demand be in the future?"
+            "app/Projected_Demand.py",
+            title="Where will demand be in the future?",
+            visibility="hidden",
         ),
         # This page will also have a summary of all of the information they have uniquely collected.
-        st.Page("app/Decide.py", title="What's your Decision?"),
+        st.Page("app/Decide.py", title="What's your Decision?", visibility="hidden"),
         # Next, we go to the optimization page.
         st.Page(
-            "app/Optimise_5_Sites.py", title="What does the maths say? (one new site)"
+            "app/Optimise_5_Sites.py",
+            title="What does the maths say? (one new site)",
+            visibility="hidden",
         ),
         st.Page(
             "app/Optimise_6_Sites.py",
             title="What does the maths say? (two new sites)",
+            visibility="hidden",
+        ),
+        st.Page(
+            "app/Aha.py",
+            title="A new challenger appears!",
+            visibility="hidden",
         ),
     ]
 )
