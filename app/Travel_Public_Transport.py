@@ -43,16 +43,19 @@ intro_text = f"""
 > They have now used the phrase "transport modelling is more complicated than people realise" on seventeen separate occasions. You have stopped counting out loud.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/travel_public_transport.html",
-    reveal_speed_ms=TERMINAL_DEFAULT_SPEED,
-)
+# Once a decision has been made on this page, drop the analyst intro (and its
+# typing animation) so a revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_public_transport:
+    char_count, reveal_speed = write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/travel_public_transport.html",
+        reveal_speed_ms=TERMINAL_DEFAULT_SPEED,
+    )
 
-st.iframe("app/assets/terminal_working/travel_public_transport.html")
+    st.iframe("app/assets/terminal_working/travel_public_transport.html")
 
-typing_duration = (char_count * reveal_speed) / 1000
-time.sleep(typing_duration)
+    typing_duration = (char_count * reveal_speed) / 1000
+    time.sleep(typing_duration)
 
 # Note the session key doesn't follow the name of the page as the automated rules
 # would make it display weirdly

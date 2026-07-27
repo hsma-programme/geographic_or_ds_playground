@@ -27,19 +27,22 @@ intro_text = """
     You ask your analyst to show deprivation and they deliver following map, but do not offer any interpretation.
     """
 
-if not st.session_state.deprivation_page_visited:
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/deprivation_page.html",
-    )
-else:
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/deprivation_page.html",
-        reveal_speed_ms=0,
-    )
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_deprivation:
+    if not st.session_state.deprivation_page_visited:
+        char_count, reveal_speed = write_terminal_html(
+            intro_text,
+            output_path="app/assets/terminal_working/deprivation_page.html",
+        )
+    else:
+        char_count, reveal_speed = write_terminal_html(
+            intro_text,
+            output_path="app/assets/terminal_working/deprivation_page.html",
+            reveal_speed_ms=0,
+        )
 
-st.iframe("app/assets/terminal_working/deprivation_page.html")
+    st.iframe("app/assets/terminal_working/deprivation_page.html")
 
 select_map = make_selection_map(render_deprivation_map, "deprivation")
 select_map()

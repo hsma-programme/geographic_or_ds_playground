@@ -26,12 +26,14 @@ intro_text = """
 > They then become pixellated and return to the cloud until they are next required. You hope the map works.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/demand.html",
-)
-
-st.iframe("app/assets/terminal_working/demand.html", height=300)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_demand:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/demand.html",
+    )
+    st.iframe("app/assets/terminal_working/demand.html", height=300)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")
 demand_selection_map()

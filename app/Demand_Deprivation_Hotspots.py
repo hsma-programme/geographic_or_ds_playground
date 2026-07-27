@@ -29,12 +29,16 @@ intro_text = """
 > They mutter something about "Moran's I" and "spatial autocorrelation", notice you have stopped listening, and retreat to the safety of their spreadsheet.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/demand_deprivation_hotspots.html",
-)
-
-st.iframe("app/assets/terminal_working/demand_deprivation_hotspots.html", height=375)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_demand_deprivation_hotspots:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/demand_deprivation_hotspots.html",
+    )
+    st.iframe(
+        "app/assets/terminal_working/demand_deprivation_hotspots.html", height=375
+    )
 
 hotspots_selection_map = make_selection_map(
     partial(render_demand_deprivation_hotspots_maps, hotspots_gdf),

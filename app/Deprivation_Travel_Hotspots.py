@@ -29,12 +29,16 @@ intro_text = """
 > They note that access here is again measured to the *existing* four CDCs - a new site could ease the burden on the areas that can least absorb it.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/deprivation_travel_hotspots.html",
-)
-
-st.iframe("app/assets/terminal_working/deprivation_travel_hotspots.html", height=375)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_deprivation_travel_hotspots:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/deprivation_travel_hotspots.html",
+    )
+    st.iframe(
+        "app/assets/terminal_working/deprivation_travel_hotspots.html", height=375
+    )
 
 hotspots_selection_map = make_selection_map(
     partial(render_deprivation_travel_hotspots_maps, hotspots_gdf),

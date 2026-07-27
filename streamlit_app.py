@@ -1,5 +1,5 @@
 import streamlit as st
-from app.utils import SITE_SELECTION_SUBMITTABLE
+from app.utils import SITE_SELECTION_SUBMITTABLE, handle_scroll_to_top
 from app.persistence import (
     get_store,
     load_into_session,
@@ -153,6 +153,9 @@ pg = st.navigation(pages)
 pages_by_path = {p.url_path: p for p in pages}
 maybe_restore_page(pg, pages_by_path)
 record_current_page(pg)
+
+# If a decision was just submitted, scroll back to the top of the page.
+handle_scroll_to_top()
 
 pg.run()
 

@@ -25,12 +25,14 @@ intro_text = """
 > They dissolve into a cloud of static, leaving you to interpret the maps.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/utilisation.html",
-)
-
-st.iframe("app/assets/terminal_working/utilisation.html", height=400)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_utilisation:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/utilisation.html",
+    )
+    st.iframe("app/assets/terminal_working/utilisation.html", height=400)
 
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")
 utilisation_selection_map()

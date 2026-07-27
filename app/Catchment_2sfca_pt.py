@@ -31,12 +31,14 @@ intro_text = """
 > They gesture at the map and fall silent, letting it make the argument for them.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/2sfca_pt.html",
-)
-
-st.iframe("app/assets/terminal_working/2sfca_pt.html", height=400)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_2sfca_pt:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/2sfca_pt.html",
+    )
+    st.iframe("app/assets/terminal_working/2sfca_pt.html", height=400)
 
 # The proposed (blue) markers on this map remain clickable and drive the site
 # selection; render_2sfca_map returns the st_folium result for that flow.

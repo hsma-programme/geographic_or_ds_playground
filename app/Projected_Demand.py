@@ -25,12 +25,14 @@ intro_text = """
 > You hear a sound you haven't heard for nearly twenty years - the dial-up tone. You realise it is coming from the analyst. You decide it is best not to question this and turn your attention to the map.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/projected_demand.html",
-)
-
-st.iframe("app/assets/terminal_working/projected_demand.html", height=375)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_projected_demand:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/projected_demand.html",
+    )
+    st.iframe("app/assets/terminal_working/projected_demand.html", height=375)
 
 projected_demand_selection_map = make_selection_map(
     render_projected_demand_map, "projected_demand"

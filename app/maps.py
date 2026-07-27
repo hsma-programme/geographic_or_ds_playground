@@ -6,6 +6,7 @@ from app.utils import (
     load_devon_sites,
     load_devon_sites_with_utilisation,
     load_population_weighted_centroids,
+    request_scroll_to_top,
     setup_lokigi_site_problem_utilisation,
 )
 import streamlit as st
@@ -1067,6 +1068,7 @@ def make_selection_map(map_render_fn, key_suffix):
 
         if button:
             st.session_state[submitted_key] = True
+            request_scroll_to_top()
             st.rerun()
 
     return selection_map

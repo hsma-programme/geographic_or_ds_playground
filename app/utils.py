@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import geopandas
 import html
 from app.utils_investigations import ALL_INVESTIGATIONS, Investigation
@@ -536,12 +537,12 @@ ANALYST_CAPACITY_MESSAGES = [
     },
     {
         "analyses_remaining": 5,
-        "message": "Your analyst appears a little less bright-eyed and bushy-tailed than when you"
+        "message": "Your analyst appears a little less bright-eyed and bushy-tailed than when you "
         "first met them. Their coffee cup does not leave their sight.",
     },
     {
         "analyses_remaining": 4,
-        "message": "Your analyst now appears to have upgraded to a hat with two coffee cups atttached and a straw."
+        "message": "Your analyst now appears to have upgraded to a hat with two coffee cups atttached and a straw. "
         "You make a note to review the coffee budget for the data department.",
     },
     {
@@ -553,7 +554,7 @@ ANALYST_CAPACITY_MESSAGES = [
     {
         "analyses_remaining": 2,
         "message": "Your analyst is mysteriously missing every time you try to talk to them. "
-        "You swear you saw them exit via a ground-floor bathroom window when you approached "
+        "You swear you saw them exit via a ground-floor window when you approached "
         "the building recently, but you cannot prove this.",
     },
     {
@@ -625,6 +626,51 @@ def page_styling():
         css_content = f.read()
 
     return st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+
+
+# A one-shot "scroll back to the top" used after a decision is submitted, so the
+# user lands at the top of the (now terminal-free) page instead of wherever the
+# submit button happened to be. request_scroll_to_top() is called at submission;
+# handle_scroll_to_top() runs once on the following rerun and consumes the flag.
+SCROLL_TOP_FLAG = "_scroll_to_top"
+
+
+def request_scroll_to_top():
+    """Ask for the next run to scroll the page to the top."""
+    st.session_state[SCROLL_TOP_FLAG] = True
+
+
+def handle_scroll_to_top():
+    """Emit the scroll-to-top JS if one was requested, then clear the flag."""
+    if not st.session_state.get(SCROLL_TOP_FLAG):
+        return
+    st.session_state[SCROLL_TOP_FLAG] = False
+
+    # A changing nonce makes Streamlit treat this as a fresh component each time,
+    # so the scroll re-fires on repeat submissions rather than being cached.
+    nonce = st.session_state.get("_scroll_nonce", 0) + 1
+    st.session_state["_scroll_nonce"] = nonce
+
+    components.html(
+        f"""
+        <script>
+            // {nonce}
+            const doc = window.parent.document;
+            const selectors = [
+                'section.main',
+                '[data-testid="stMain"]',
+                '[data-testid="stAppViewContainer"]',
+                '[data-testid="stMainBlockContainer"]',
+            ];
+            for (const sel of selectors) {{
+                const el = doc.querySelector(sel);
+                if (el) el.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+            }}
+            window.parent.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+        </script>
+        """,
+        height=0,
+    )
 
 
 def select_site_from_current_evidence():

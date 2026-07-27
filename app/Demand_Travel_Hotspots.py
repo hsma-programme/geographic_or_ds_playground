@@ -29,12 +29,14 @@ intro_text = """
 > They add, a little pointedly, that these travel times are to the *existing* four CDCs - the whole point of this exercise is to work out where a fifth might help most.
 """
 
-char_count, reveal_speed = write_terminal_html(
-    intro_text,
-    output_path="app/assets/terminal_working/demand_travel_hotspots.html",
-)
-
-st.iframe("app/assets/terminal_working/demand_travel_hotspots.html", height=375)
+# Once a decision has been made on this page, drop the analyst intro so a
+# revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_demand_travel_hotspots:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/demand_travel_hotspots.html",
+    )
+    st.iframe("app/assets/terminal_working/demand_travel_hotspots.html", height=375)
 
 hotspots_selection_map = make_selection_map(
     partial(render_demand_travel_hotspots_maps, hotspots_gdf),
