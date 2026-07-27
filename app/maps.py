@@ -42,6 +42,7 @@ def _slim_for_map(gdf, keep_cols):
     slim[geom_name] = set_precision(slim[geom_name].values, grid_size=1e-5)
     return slim
 
+
 def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
     existing_sites = sites_gdf[sites_gdf["Existing"] == "Yes"]
     proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
@@ -204,9 +205,7 @@ def render_demand_map():
         index=0,
     )
     # Create choropleth
-    m = _slim_for_map(
-        demand_gdf, ["LSOA21NM", selected_age_range, "Total"]
-    ).explore(
+    m = _slim_for_map(demand_gdf, ["LSOA21NM", selected_age_range, "Total"]).explore(
         column=selected_age_range,
         tooltip=[
             "LSOA21NM",
@@ -272,9 +271,7 @@ def render_projected_demand_map():
             tooltip_aliases.append(alias)
 
     # Create choropleth
-    m = _slim_for_map(
-        projected_gdf, [selected_metric, *tooltip_columns]
-    ).explore(
+    m = _slim_for_map(projected_gdf, [selected_metric, *tooltip_columns]).explore(
         column=selected_metric,
         tooltip=tooltip_columns,
         tooltip_kwds={
@@ -338,7 +335,7 @@ def render_utilisation_map():
     proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
 
     # Centre roughly on Devon; fit to the sites afterwards.
-    m = folium.Map(location=[50.72, -3.8], zoom_start=9, tiles="cartodbpositron")
+    m = folium.Map(location=[50.72, -3.8], zoom_start=8, tiles="cartodbpositron")
 
     existing_group = folium.FeatureGroup(name="Existing CDCs (utilisation)")
     proposed_group = folium.FeatureGroup(name="Proposed CDCs")
@@ -388,8 +385,8 @@ def render_utilisation_map():
     proposed_group.add_to(m)
 
     # Frame the map on all sites.
-    bounds = sites_gdf.total_bounds  # [minx, miny, maxx, maxy]
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+    # bounds = sites_gdf.total_bounds  # [minx, miny, maxx, maxy]
+    # m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
     m = _add_utilisation_legend(m)
     folium.LayerControl(collapsed=False).add_to(m)
@@ -406,7 +403,7 @@ def render_utilisation_map():
 
     with col_demand:
         st.markdown("**Where is the regional demand? (population aged 50-84)**")
-        demand_m = _build_regional_demand_map()
+        demand_m = _build_regional_demand_map(zoom=8)
         st_folium(demand_m, use_container_width=True, key="utilisation_demand_map")
         st.caption(
             "Darker areas have more people aged 50-84 - the group most likely to "
@@ -437,16 +434,14 @@ def render_utilisation_map():
     return result
 
 
-def _build_regional_demand_map():
+def _build_regional_demand_map(zoom=9):
     """Compact demand choropleth (population aged 50-84 per LSOA) with the
     existing/proposed CDCs overlaid, for the utilisation page's second column.
     Mirrors render_demand_map() but with no age-range toggle and returns the
     folium map instead of calling st_folium (the caller renders it)."""
     demand_gdf = create_demand_gdf()
 
-    demand_m = _slim_for_map(
-        demand_gdf, ["LSOA21NM", "MF50-84", "Total"]
-    ).explore(
+    demand_m = _slim_for_map(demand_gdf, ["LSOA21NM", "MF50-84", "Total"]).explore(
         column="MF50-84",
         tooltip=["LSOA21NM", "MF50-84", "Total"],
         tooltip_kwds={
@@ -459,7 +454,7 @@ def _build_regional_demand_map():
             "sticky": False,
         },
         name="Population 50-84",
-        zoom_start=9,
+        zoom_start=zoom,
         scheme="Percentiles",
     )
 
