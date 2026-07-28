@@ -35,3 +35,6 @@ data/travel_matrix_generation/valhalla
 data/travel_matrix_generation/devon-260422-modified.osm.pbf
 data/travel_matrix_generation/devon-260422-modified-traffic.osm.pbf
 data/travel_matrix_generation/itm_south_west_gtfs.zip
+
+notes/
+CLAUDE.md
