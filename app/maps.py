@@ -868,24 +868,30 @@ def render_travel_maps(best_solution_gdf):
 # so it renders reliably in st_folium. The priority typology and the statistical
 # clusters are two views of the same precomputed data, shared across every
 # hotspot page.
+## D2 fix: the two "worth watching" categories per typology used to share the
+# same orange (#fdae61), so they were indistinguishable on the map itself
+# without hovering for the tooltip. Each pair now gets a distinct amber shade -
+# orange for the variant where the *first-named* factor is the elevated one,
+# gold for the variant where the *second-named* factor is - while staying
+# clearly a lower tier than the priority red and higher than the grey baseline.
 _DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = {
     "High Demand / High Deprivation": "#d7191c",  # priority - act here first
-    "High Demand / Low Deprivation": "#fdae61",  # worth watching
-    "Low Demand / High Deprivation": "#fdae61",  # worth watching
+    "High Demand / Low Deprivation": "#fdae61",  # worth watching (demand-led)
+    "Low Demand / High Deprivation": "#fee08b",  # worth watching (deprivation-led)
     "Low Demand / Low Deprivation": "#bdbdbd",  # baseline
 }
 
 _DEMAND_TRAVEL_TYPOLOGY_COLOURS = {
     "High Demand / Poor Access": "#d7191c",  # priority - act here first
-    "High Demand / Good Access": "#fdae61",  # worth watching
-    "Low Demand / Poor Access": "#fdae61",  # worth watching
+    "High Demand / Good Access": "#fdae61",  # worth watching (demand-led)
+    "Low Demand / Poor Access": "#fee08b",  # worth watching (access-led)
     "Low Demand / Good Access": "#bdbdbd",  # baseline
 }
 
 _DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = {
     "High Deprivation / Poor Access": "#d7191c",  # priority - act here first
-    "High Deprivation / Good Access": "#fdae61",  # worth watching
-    "Low Deprivation / Poor Access": "#fdae61",  # worth watching
+    "High Deprivation / Good Access": "#fdae61",  # worth watching (deprivation-led)
+    "Low Deprivation / Poor Access": "#fee08b",  # worth watching (access-led)
     "Low Deprivation / Good Access": "#bdbdbd",  # baseline
 }
 
