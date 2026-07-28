@@ -30,7 +30,7 @@ best_solution_gdf = region_geometry.merge(
 intro_text = f"""
 > The analyst returns with the same map as before, but this time the travel times are for public transport rather than the car.
 <br><br>
-> They tell you that you can swap between each LSOA showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
+> They tell you that you can swap between each LSOA - a small statistical area of around 1,500 people - showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
 <br><br>
 > "Same catch as last time," they add. "The colours only reflect the sites open today - the candidate pins are there for you to pick from, not to show what would happen if one were actually built."
 <br><br>

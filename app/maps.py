@@ -197,8 +197,8 @@ def render_demand_map():
     raw_options = ["MF50-84", "Total"]
 
     alias_dict = {
-        "MF50-84": "Per-LSOA Population - Between 50 and 84",
-        "Total": "Total Per-LSOA Population",
+        "MF50-84": "Population 50-84, by area",
+        "Total": "Total population, by area",
     }
 
     selected_age_range = st.radio(
@@ -252,8 +252,8 @@ def render_projected_demand_map():
 
     alias_dict = {
         "MF50-84 Growth (%)": "Projected Growth 2026-2036 (%)",
-        "MF50-84": "Projected Per-LSOA Population in 2036 - Between 50 and 84",
-        "Total": "Projected Total Per-LSOA Population in 2036",
+        "MF50-84": "Projected population 50-84 in 2036, by area",
+        "Total": "Projected total population in 2036, by area",
     }
 
     selected_metric = st.radio(
@@ -750,7 +750,7 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
     elif what == "centre":
         column = "selected_site"
         name = "Nearest Site"
-        legend_kwds = {"caption": "Nearest Site to LSOA"}
+        legend_kwds = {"caption": "Nearest Site to Area"}
         cmap = None
     if what == "threshold":
         if threshold is None:

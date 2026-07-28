@@ -34,7 +34,7 @@ best_solution_gdf = region_geometry.merge(
 
 
 intro_text = f"""
-> The analyst presents you with the following map of how long it takes to travel from the centre of each LSOA to its nearest site.
+> The analyst presents you with the following map of how long it takes to travel from the centre of each LSOA - a small statistical area of around 1,500 people - to its nearest site.
 <br><br>
 > They tell you that you can swap between each LSOA showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
 <br><br>
