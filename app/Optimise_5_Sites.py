@@ -1,5 +1,5 @@
 import streamlit as st
-from app.utils import page_styling, load_devon_sites
+from app.utils import page_styling, load_devon_sites, RANK_METRIC_ASCENDING
 from app.persistence import render_reset_button
 import time
 from PIL import Image
@@ -65,6 +65,8 @@ run = st.button(
 status = st.empty()
 
 if run:
+    st.session_state["optimise_5_sites_ran"] = True
+
     with st.spinner("The optimiser is starting up..."):
         time.sleep(3)
 
@@ -102,6 +104,16 @@ if run:
 
     solution_df_display = solution_df_display.drop(columns="site_names")
 
+    # Full-precision copy for ranking/matching - rounding solution_df_display to
+    # 2dp can create ties (e.g. several combinations rounding to the same
+    # coverage percentage) that a sort then resolves inconsistently, silently
+    # picking the wrong "best" row. Only solution_df_display (rounded) is used
+    # for the table shown to the user, never for ranking.
+    solution_df_ranking = solution.solution_df.copy()
+    solution_df_ranking["site"] = solution_df_ranking["site_names"].apply(
+        lambda x: [i for i in x if i not in existing_sites][0]
+    )
+
     def ordinal(n: int) -> str:
         """Convert an integer to its ordinal representation."""
         if 10 <= n % 100 <= 20:
@@ -132,25 +144,25 @@ if run:
 
     weighted = ordinal(
         get_solution_rank(
-            solution_df_display, selected_site, "weighted_average", ascending=True
+            solution_df_ranking, selected_site, "weighted_average", ascending=True
         )
     )
     average = ordinal(
         get_solution_rank(
-            solution_df_display, selected_site, "unweighted_average", ascending=True
+            solution_df_ranking, selected_site, "unweighted_average", ascending=True
         )
     )
     p90 = ordinal(
         get_solution_rank(
-            solution_df_display, selected_site, "90th_percentile", ascending=True
+            solution_df_ranking, selected_site, "90th_percentile", ascending=True
         )
     )
     maximum = ordinal(
-        get_solution_rank(solution_df_display, selected_site, "max", ascending=True)
+        get_solution_rank(solution_df_ranking, selected_site, "max", ascending=True)
     )
     coverage = ordinal(
         get_solution_rank(
-            solution_df_display,
+            solution_df_ranking,
             selected_site,
             "proportion_within_coverage_threshold",
             ascending=False,
@@ -207,10 +219,10 @@ Your solution is the:
                 st.subheader("Your Selected Solution")
                 ax = solution.plot_best_combination(
                     solution_rank=get_solution_rank(
-                        solution_df_display,
+                        solution_df_ranking,
                         selected_site,
                         rank_on,
-                        ascending=True,
+                        ascending=RANK_METRIC_ASCENDING[rank_on],
                     ),
                     plot_regions_not_meeting_threshold=True
                     if rank_on == "proportion_within_coverage_threshold"
@@ -222,21 +234,28 @@ Your solution is the:
         plot_best_sols()
 
     with tab_4:
+        # Select only the columns actually shown before handing off to
+        # st.dataframe - it Arrow-serialises every column of whatever frame
+        # it's given (even ones excluded via column_order below), and
+        # solution_df_display still carries dict-valued equity-group columns
+        # that Arrow can't represent, which otherwise raises a (recovered,
+        # but noisy) conversion warning.
+        display_columns = [
+            "solution_rank",
+            "site",
+            "weighted_average",
+            "unweighted_average",
+            "90th_percentile",
+            "max",
+            "proportion_within_coverage_threshold",
+            "inter_tertile_ratio",
+            "avg_lower_third_bins",
+            "avg_upper_third_bins",
+        ]
         st.dataframe(
-            solution_df_display,
+            solution_df_display[display_columns],
             hide_index=True,
-            column_order=[
-                "solution_rank",
-                "site",
-                "weighted_average",
-                "unweighted_average",
-                "90th_percentile",
-                "max",
-                "proportion_within_coverage_threshold",
-                "inter_tertile_ratio",
-                "avg_lower_third_bins",
-                "avg_upper_third_bins",
-            ],
+            column_order=display_columns,
             column_config={
                 "solution_rank": st.column_config.NumberColumn(
                     "Rank",
@@ -324,6 +343,18 @@ Your solution is the:
 
     with tab_3:
         st.pyplot(solution.plot_pareto_facets())
+
+if st.session_state.get("optimise_5_sites_ran"):
+    st.divider()
+    st.subheader("But wait...")
+    if st.button(
+        "The head of the region just found £5m down the back of the sofa. "
+        "See what changes with two new sites.",
+        key="btn_continue_optimise_6",
+        icon=":material/celebration:",
+        width="stretch",
+    ):
+        st.switch_page("app/Optimise_6_Sites.py")
 
 st.write("")
 render_reset_button(label="Start the whole exercise again", key="reset_opt5")

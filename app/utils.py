@@ -19,6 +19,21 @@ MAXIMUM_BRIEFINGS = 6
 # visible (unlike Positron) while staying more muted than default OpenStreetMap.
 BASEMAP_TILES = "cartodbvoyager"
 
+# Which direction "best" sorts in for each optimiser solution_df metric - lower
+# is better for every travel-time-style column, higher is better for coverage.
+# Used on the Optimise pages so a rank looked up externally (e.g. "where does
+# my chosen site fall for this metric?") lines up with lokigi's own internal
+# ranking convention in SiteSolutionSet.plot_best_combination (documented as
+# "highest for coverage proportions, lowest for travel costs").
+RANK_METRIC_ASCENDING = {
+    "weighted_average": True,
+    "unweighted_average": True,
+    "90th_percentile": True,
+    "max": True,
+    "proportion_within_coverage_threshold": False,
+    "inter_tertile_ratio": True,
+}
+
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
     "deprivation",
