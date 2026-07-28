@@ -1027,6 +1027,10 @@ def make_selection_map(map_render_fn, key_suffix):
 
         st_data = map_render_fn()
 
+        st.caption(
+            "You won't see the whole picture from one page. Commit to your best "
+            "call now; you'll find out later how it holds up as the evidence builds."
+        )
         st.write("From just the evidence on this page, which site would you choose?")
 
         all_sites = load_devon_sites()
