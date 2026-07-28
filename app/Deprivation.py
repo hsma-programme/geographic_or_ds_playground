@@ -4,6 +4,7 @@ from app.utils import (
     render_navigation,
     page_styling,
     render_notes_textbox,
+    TERMINAL_DEFAULT_SPEED,
 )
 from app.utils_investigations import DEPRIVATION
 from app.maps import render_deprivation_map, make_selection_map
@@ -30,17 +31,13 @@ intro_text = """
 # Once a decision has been made on this page, drop the analyst intro so a
 # revisit shows just the evidence and outcome.
 if not st.session_state.site_submitted_deprivation:
-    if not st.session_state.deprivation_page_visited:
-        char_count, reveal_speed = write_terminal_html(
-            intro_text,
-            output_path="app/assets/terminal_working/deprivation_page.html",
-        )
-    else:
-        char_count, reveal_speed = write_terminal_html(
-            intro_text,
-            output_path="app/assets/terminal_working/deprivation_page.html",
-            reveal_speed_ms=0,
-        )
+    reveal_speed = 0 if st.session_state.deprivation_page_visited else TERMINAL_DEFAULT_SPEED
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/deprivation_page.html",
+        reveal_speed_ms=reveal_speed,
+    )
+    st.session_state.deprivation_page_visited = True
 
     st.iframe("app/assets/terminal_working/deprivation_page.html")
 

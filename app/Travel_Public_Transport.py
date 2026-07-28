@@ -10,7 +10,6 @@ from app.utils import (
 )
 from app.utils_investigations import TRAVEL_PT
 from app.maps import render_travel_maps, make_selection_map
-import time
 from functools import partial
 
 
@@ -46,16 +45,13 @@ intro_text = f"""
 # Once a decision has been made on this page, drop the analyst intro (and its
 # typing animation) so a revisit shows just the evidence and outcome.
 if not st.session_state.site_submitted_public_transport:
-    char_count, reveal_speed = write_terminal_html(
+    write_terminal_html(
         intro_text,
         output_path="app/assets/terminal_working/travel_public_transport.html",
         reveal_speed_ms=TERMINAL_DEFAULT_SPEED,
     )
 
     st.iframe("app/assets/terminal_working/travel_public_transport.html")
-
-    typing_duration = (char_count * reveal_speed) / 1000
-    time.sleep(typing_duration)
 
 # Note the session key doesn't follow the name of the page as the automated rules
 # would make it display weirdly

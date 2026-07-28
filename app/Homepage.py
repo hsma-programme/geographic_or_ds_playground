@@ -1,4 +1,3 @@
-import time
 import streamlit as st
 from app.utils import (
     write_terminal_html,
@@ -35,23 +34,15 @@ intro_text = f"""
 > What is your first request to your data analyst?
 """
 
-if not st.session_state.homepage_visited:
-    reveal_speed = TERMINAL_DEFAULT_SPEED
+reveal_speed = TERMINAL_DEFAULT_SPEED if not st.session_state.homepage_visited else 0
 
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/homepage.html",
-        reveal_speed_ms=reveal_speed,
-    )
+write_terminal_html(
+    intro_text,
+    output_path="app/assets/terminal_working/homepage.html",
+    reveal_speed_ms=reveal_speed,
+)
 
-else:
-    reveal_speed = 0
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/homepage.html",
-        reveal_speed_ms=reveal_speed,
-    )
-
+st.session_state.homepage_visited = True
 
 with cola:
     st.iframe("app/assets/terminal_working/homepage.html")
@@ -64,10 +55,6 @@ with colb:
         scanlines=0.6,
     )
     st.iframe(generated_crt)
-
-if reveal_speed != 0:
-    typing_duration = (char_count * reveal_speed) / 1000
-    time.sleep(typing_duration)
 
 render_capacity_status()
 
