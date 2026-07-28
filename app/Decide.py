@@ -11,8 +11,7 @@ from app.persistence import render_reset_button
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
 
-st.write("")
-st.write("")
+st.title("Your Decision")
 
 if not st.session_state.site_submitted_final:
     decisions = []
@@ -21,17 +20,48 @@ if not st.session_state.site_submitted_final:
         if "final" not in key:
             decisions.append(st.session_state[f"confirmed_site_{key}"])
 
-    decision_string = [
-        f"You chose {decision['Site']} for {decision['What']}"
-        for decision in decisions
-        if decision is not None
-    ]
+    valid_decisions = [decision for decision in decisions if decision is not None]
 
-    st.info(
-        f"""
-        {"\n\n".join(decision_string)}
-        """
+    intro_text = """
+> Your analyst has gone quiet. Query after query, map after map - and now, apparently, no more.
+<br><br>
+> They slide a single sheet across the desk: every site you picked, and what you were looking at when you picked it.
+<br><br>
+> It is, they mention without quite meeting your eye, not the same site every time.
+"""
+
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/decide.html",
     )
+    st.iframe("app/assets/terminal_working/decide.html", height=300)
+
+    n = len(valid_decisions)
+    distinct_sites = {decision["Site"] for decision in valid_decisions}
+    n_distinct = len(distinct_sites)
+    briefing_word = "briefing" if n == 1 else "briefings"
+
+    if n_distinct == 1:
+        st.subheader(f"{n} {briefing_word}. One site, every time.")
+        st.caption(
+            f"Every one of your {n} {briefing_word} pointed to the same place. "
+            "Let's see if the maths agrees."
+        )
+    else:
+        site_word = "site" if n_distinct == 1 else "sites"
+        st.subheader(f"{n} {briefing_word}. {n_distinct} different {site_word}.")
+        st.caption(
+            "Different evidence pointed you in different directions. That's not "
+            "a mistake - it's the whole reason this exercise exists."
+        )
+
+    st.write("")
+
+    for decision in valid_decisions:
+        with st.container(border=True):
+            st.markdown(
+                f":material/location_on: **{decision['Site']}** — {decision['What']}"
+            )
 
     devon_sites = load_devon_sites()
     selectable_sites = devon_sites[devon_sites["Existing"] == "No"]
