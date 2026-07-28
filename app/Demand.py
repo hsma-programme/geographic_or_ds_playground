@@ -16,7 +16,7 @@ st.title("Demand")
 intro_text = """
 > Your analyst has delivered the following map.
 <br><br>
-> They tell you that you can hover over the red icons (the current CDCs) and the blue icons (the blue CDCs) to find out more.
+> They tell you that you can hover over the red icons (the current CDCs) and the blue icons (the proposed CDCs) to find out more.
 <br><br>
 > They also tell you that you can hover over each coloured region to see the exact count of people 50-84 in the region.
 <br><br>
