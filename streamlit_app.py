@@ -45,17 +45,6 @@ if CURRENT_PAGE_KEY not in st.session_state:
 if "homepage_visited" not in st.session_state:
     st.session_state.homepage_visited = False
 
-# Add in a state ensuring they see at least one DEMAND-related page before unlocking
-# the 'make a recommendation' button
-if "observed_one_demand_page" not in st.session_state:
-    st.session_state.observed_one_demand_page = False
-
-# Add in a state ensuring they see at least one ACCESSIBILITY-related page before unlocking
-# the 'make a recommendation' button
-if "observed_one_accessibility_page" not in st.session_state:
-    st.session_state.observed_one_accessibility_page = False
-
-
 # Set up session keys relating to site submissions
 for i in SITE_SELECTION_SUBMITTABLE:
     if f"confirmed_site_{i}" not in st.session_state:
