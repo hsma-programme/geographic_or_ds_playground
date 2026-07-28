@@ -56,7 +56,7 @@ if not st.session_state.site_submitted_final:
         "Make your choice.",
         key="btn_make_choice_5_sites",
         icon=":material/balance:",
-        use_container_width=True,
+        width="stretch",
         disabled=selected_site_final is None,
     ):
         if not st.session_state.site_submitted_final:
@@ -68,7 +68,7 @@ else:
         "You made your choice already. Click here to proceed.",
         key="btn_make_choice_5_sites",
         icon=":material/balance:",
-        use_container_width=True,
+        width="stretch",
     ):
         st.switch_page("app/Aha.py")
 
