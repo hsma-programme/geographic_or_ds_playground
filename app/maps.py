@@ -307,25 +307,28 @@ def render_projected_demand_map():
 # not a per-LSOA choropleth, so unlike the other maps this one draws no region
 # layer - just the sites on a plain basemap, mirroring lokigi's
 # plot_site_utilisation(). Existing CDCs are coloured/sized by utilisation
-# (green = spare capacity, red = at/over capacity, following lokigi's RdYlGn_r
-# convention); proposed CDCs stay blue so they remain clickable for the site
-# selection at the bottom of the page.
-_UTIL_COLOUR_MIN = 0.5  # <=50% used -> full green
+# (blue = spare capacity, red = at/over capacity - a colourblind-safe RdYlBu_r
+# ramp rather than lokigi's own red/green convention, since a pure red-green
+# scale is unreadable under deuteranopia); proposed CDCs stay a distinct blue
+# marker colour so they remain clickable for the site selection at the bottom
+# of the page.
+_UTIL_COLOUR_MIN = 0.5  # <=50% used -> full blue
 _UTIL_COLOUR_MAX = 1.0  # >=100% used -> full red (over-capacity clips to red)
 
 
 def _utilisation_style(ratio):
-    """Return (hex colour, marker radius) for a utilisation ratio, using the
-    same green->red reading as lokigi: low ratio = green + small, high (bad)
-    ratio = red + large so over-capacity sites stand out."""
+    """Return (hex colour, marker radius) for a utilisation ratio: low ratio =
+    blue + small, high (bad) ratio = red + large so over-capacity sites stand
+    out. Uses RdYlBu_r rather than a red/green ramp so the reading survives
+    red-green colour blindness."""
     import matplotlib
     from matplotlib.colors import Normalize, to_hex
 
     norm = Normalize(vmin=_UTIL_COLOUR_MIN, vmax=_UTIL_COLOUR_MAX)
-    cmap = matplotlib.colormaps["RdYlGn_r"]
+    cmap = matplotlib.colormaps["RdYlBu_r"]
     t = min(max(norm(ratio), 0.0), 1.0)  # clip into [0, 1]
     colour = to_hex(cmap(t))
-    radius = 12 + t * 16  # 12px (green) -> 28px (red)
+    radius = 12 + t * 16  # 12px (blue) -> 28px (red)
     return colour, radius
 
 
@@ -465,7 +468,7 @@ def _build_regional_demand_map(zoom=9):
     )
 
     # Sites here are context only - existing CDCs white, proposed CDCs grey (both
-    # deliberately clear of the green->red utilisation ramp on the left map) so it
+    # deliberately clear of the blue->red utilisation ramp on the left map) so it
     # reads as "you can't pick here". Site selection happens on the left map.
     sites_gdf = load_devon_sites()
     reference_group = folium.FeatureGroup(name="CDCs (reference only)")
@@ -613,14 +616,17 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
         region_df.reset_index(), left_on="LSOA21NM", right_on="LSOA 2021 Name"
     )
 
-    # Green = well-served, red = underserved (deepest red = no CDC within the limit),
-    # so the areas that most need a new site jump out.
+    # Blue = well-served, red = underserved (deepest red = no CDC within the
+    # limit), so the areas that most need a new site jump out. RdYlBu rather
+    # than lokigi's own RdYlGn convention: a pure red-green ramp is unreadable
+    # under deuteranopia, and NHS public-sector tools are expected to clear
+    # WCAG 2.1 AA colour-contrast/colour-blindness guidance.
     m = _slim_for_map(
         gdf, ["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"]
     ).explore(
         column="access_scaled",
         tiles=BASEMAP_TILES,
-        cmap="RdYlGn",
+        cmap="RdYlBu",
         tooltip=["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"],
         tooltip_kwds={
             "aliases": [
@@ -636,7 +642,7 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
         zoom_start=9,
         scheme="Percentiles",
         # Default explore legend shows raw percentile-bin numbers; we replace it
-        # with a semantic gradient legend below (green = well served, red = not).
+        # with a semantic gradient legend below (blue = well served, red = not).
         legend=False,
     )
 
@@ -646,7 +652,7 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
     result = st_folium(m, width="stretch", key=f"2sfca_{mode_key}_map")
 
     st.caption(
-        "Greener areas have more CDC capacity available per resident once travel time "
+        "Bluer areas have more CDC capacity available per resident once travel time "
         "*and* competition from other patients are taken into account. Red areas are "
         "the most underserved; the deepest red areas have no existing CDC within the "
         "travel limit selected above at all."
@@ -683,8 +689,9 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
 
 def _add_2sfca_legend(m):
     # A semantic legend for the choropleth: rather than the raw percentile-bin
-    # numbers explore would print, show the green->red ramp with what it means,
-    # plus the CDC site markers, in a single box.
+    # numbers explore would print, show the red->blue ramp with what it means,
+    # plus the CDC site markers, in a single box. RdYlBu stops (colourblind-safe
+    # alternative to lokigi's own red/green convention - see render_2sfca_map).
     legend_html = """
     <div class="sfca-maplegend" style="
         position: fixed;
@@ -701,7 +708,7 @@ def _add_2sfca_legend(m):
     <span style="font-size:11px;color:#555;">Weekly CDC capacity within reach,
     per resident (2SFCA)</span>
     <div style="height:12px;margin:6px 0 2px 0;border:1px solid #333;
-        background:linear-gradient(to right,#a50026,#fee08b,#1a9850);"></div>
+        background:linear-gradient(to right,#a50026,#ffffbf,#313695);"></div>
     <div style="display:flex;justify-content:space-between;font-size:11px;">
         <span>Underserved</span><span>Well served</span>
     </div>

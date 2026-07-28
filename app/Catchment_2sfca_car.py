@@ -21,7 +21,7 @@ intro_text = """
 <br><br>
 > "It takes how much capacity each CDC has, how many people can reach it, and how far away it is - and works out how much diagnostic capacity is realistically available to the people living in each area. Analysts call it a two-step floating catchment area, or 2SFCA. You can think of it as 'slots per person, once you account for everyone queueing ahead of them'."
 <br><br>
-> "Green areas are comfortably served. Red areas are stretched thin - and the deepest red areas can't reach any CDC at all within the travel limit. The clever part: two neighbourhoods the same distance from a CDC can still end up very different colours, if one of them is sharing that centre with far more people."
+> "Blue areas are comfortably served. Red areas are stretched thin - and the deepest red areas can't reach any CDC at all within the travel limit. The clever part: two neighbourhoods the same distance from a CDC can still end up very different colours, if one of them is sharing that centre with far more people."
 <br><br>
 > "One catch," they add, glancing at the blue pins. "This is all worked out from the four CDCs open today. Clicking a candidate pin doesn't add its capacity in - it just tells us which one you'd pick."
 <br><br>

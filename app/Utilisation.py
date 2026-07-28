@@ -15,7 +15,7 @@ st.title("Current CDC Utilisation")
 intro_text = """
 > Your analyst returns with two maps side by side.
 <br><br>
-> On the left are the four CDCs that already exist, each coloured by how much of its weekly capacity is currently being used: green centres have spare capacity, red centres are running at or beyond what they were built to handle. The busier the site, the bigger the circle. Hover over (or click) each circle for its weekly capacity, actual caseload, and remaining room - the table below repeats these numbers.
+> On the left are the four CDCs that already exist, each coloured by how much of its weekly capacity is currently being used: blue centres have spare capacity, red centres are running at or beyond what they were built to handle. The busier the site, the bigger the circle. Hover over (or click) each circle for its weekly capacity, actual caseload, and remaining room - the table below repeats these numbers.
 <br><br>
 > On the right is the underlying regional demand: the population aged 50-84 in each area, who are most likely to need CDC services. Darker areas mean more people.
 <br><br>

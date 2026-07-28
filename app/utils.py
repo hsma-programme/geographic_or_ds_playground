@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import geopandas
 import html
+import re
 from app.utils_investigations import ALL_INVESTIGATIONS, Investigation
 import base64
 from PIL import Image
@@ -232,6 +233,18 @@ def load_deprivation_travel_hotspots():
     return pd.read_pickle("data/deprivation_travel_hotspots.pkl")
 
 
+def _sr_only_text(text: str) -> str:
+    """Plain-text fallback for the typewriter div: `<br>`s become line breaks,
+    any other markup is stripped, then the result is HTML-escaped for safe
+    embedding. Read immediately by screen readers/JS-disabled browsers, since
+    the animated div is aria-hidden and only reveals its text via `innerHTML`
+    once the char-by-char JS typing effect finishes.
+    """
+    collapsed = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    collapsed = re.sub(r"<[^>]+>", "", collapsed)
+    return html.escape(collapsed, quote=True)
+
+
 def write_terminal_html(
     text: str,
     output_path: str = "app/assets/terminal.html",
@@ -247,6 +260,7 @@ def write_terminal_html(
         js = f.read()
 
     safe_text = html.escape(text, quote=True)
+    sr_text = _sr_only_text(text)
     strong_pct = int(glow_amount * 100)
     soft_pct = int(glow_amount * 40)
 
@@ -263,7 +277,8 @@ def write_terminal_html(
 </style>
 </head>
 <body>
-  <div id="typewrite" class="typeing" data-text="{safe_text}"></div>
+  <div id="typewrite" class="typeing" aria-hidden="true" data-text="{safe_text}"></div>
+  <div class="sr-only" role="status">{sr_text}</div>
   <script>
     var REVEAL_SPEED_MS = {reveal_speed_ms};
     var CURSOR = {repr(cursor)};
