@@ -396,19 +396,41 @@ def _already_visited(investigation: Investigation) -> bool:
     return investigation.id in visited_ids
 
 
+def _missing_prerequisites(investigation: Investigation) -> list[str]:
+    """IDs of this investigation's prerequisites not yet visited."""
+    visited_ids = {v["id"] for v in st.session_state.pages_visited}
+    return [p for p in investigation.prerequisites if p not in visited_ids]
+
+
 def investigation_button(investigation: Investigation) -> None:
     """
     Render a single investigation button.
 
-    - Hidden if prerequisites are unmet.
+    - Locked (visible but disabled, naming what's still needed) if
+      prerequisites are unmet - shows the curriculum exists rather than
+      hiding it entirely.
     - Greyed out (non-clickable) if already visited.
     - Active and clickable otherwise.
     """
+    button_key = f"inv_btn_{investigation.id}"
+
     if not _prerequisites_met(investigation):
-        return  # Hidden entirely
+        missing_titles = ", ".join(
+            ALL_INVESTIGATIONS[p].title
+            for p in _missing_prerequisites(investigation)
+            if p in ALL_INVESTIGATIONS
+        )
+        st.html(f"""
+            <div class="investigation-tile investigation-tile-locked">
+                <span style="margin-right: 8px; flex-shrink: 0;">&#128274;</span>
+                <span><strong>Locked</strong> - {investigation.analyst_prompt}<br>
+                    <span class="investigation-tile-requires">Requires: {missing_titles}</span>
+                </span>
+            </div>
+        """)
+        return
 
     visited = _already_visited(investigation)
-    button_key = f"inv_btn_{investigation.id}"
 
     # # Use Iconify API to grab the Lucide icon as a clean, static SVG image
     # # Lucide icons on Iconify use the prefix "lucide" (e.g., lucide/search)
@@ -425,19 +447,7 @@ def investigation_button(investigation: Investigation) -> None:
         icon_html = f'<img src="{icon_url}" style="width:18px; height:18px; vertical-align:middle; margin-right:8px; filter: opacity(0.4) grayscale(100%);" />'
         # Render as static greyed-out tile — no button interaction
         st.html(f"""
-            <div style="
-                display: flex;
-                align-items: center;
-                padding: 12px 16px;
-                border-radius: 8px;
-                border: 1.5px solid #e0e0e0;
-                background: #f7f7f7;
-                color: #aaa;
-                font-size: 0.92rem;
-                cursor: not-allowed;
-                margin-bottom: 6px;
-                user-select: none;
-            ">
+            <div class="investigation-tile investigation-tile-visited">
                 {icon_html}
                 <span>✓ {investigation.analyst_prompt}</span>
             </div>
@@ -470,9 +480,16 @@ def render_navigation(current: Investigation) -> None:
 
     st.subheader("Recommended next steps")
     st.caption("More options may unlock as you progress through the problem.")
-    for inv_id in current.recommended_next:
-        if inv_id in ALL_INVESTIGATIONS:
-            investigation_button(ALL_INVESTIGATIONS[inv_id])
+    recommended = [
+        ALL_INVESTIGATIONS[inv_id]
+        for inv_id in current.recommended_next
+        if inv_id in ALL_INVESTIGATIONS
+    ]
+    # Locked entries sink to the bottom of the list (stable sort keeps
+    # everything else in its existing order) - what you can act on right
+    # now stays primary, what's still locked reads as secondary/aspirational.
+    for inv in sorted(recommended, key=lambda inv: not _prerequisites_met(inv)):
+        investigation_button(inv)
 
     other_investigations = [
         inv
@@ -480,13 +497,12 @@ def render_navigation(current: Investigation) -> None:
         if inv_id not in set(current.recommended_next) | {current.id}
     ]
 
-    if any(
-        _prerequisites_met(inv) and not _already_visited(inv)
-        for inv in other_investigations
-    ):
+    if any(not _already_visited(inv) for inv in other_investigations):
         st.divider()
         st.subheader("Other available investigations")
-        for inv in other_investigations:
+        for inv in sorted(
+            other_investigations, key=lambda inv: not _prerequisites_met(inv)
+        ):
             investigation_button(inv)
 
     st.subheader("Other Actions")

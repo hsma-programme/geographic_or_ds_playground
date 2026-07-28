@@ -41,3 +41,48 @@ div[data-testid="stButton"] button {
     gap: 12px;
     /* Adds breathing room between the larger icon and text */
 }
+
+/* Investigation tiles (investigation_button() in app/utils.py): the locked
+   (prerequisites unmet) and visited (already done) non-clickable states.
+   Colours are theme-aware - hardcoded light values would render as a bright
+   block against Streamlit's dark theme. */
+.investigation-tile {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    cursor: not-allowed;
+    margin-bottom: 6px;
+    user-select: none;
+}
+
+.investigation-tile-requires {
+    font-size: 0.8rem;
+}
+
+.investigation-tile-locked {
+    border: 1.5px dashed #d9d9d9;
+    background: #fafafa;
+    color: #b3b3b3;
+}
+
+.investigation-tile-visited {
+    border: 1.5px solid #d0d0d0;
+    background: #f0f0f0;
+    color: #999;
+}
+
+@media (prefers-color-scheme: dark) {
+    .investigation-tile-locked {
+        border-color: #3d4147;
+        background: #21242b;
+        color: #6b7280;
+    }
+
+    .investigation-tile-visited {
+        border-color: #454a52;
+        background: #262a31;
+        color: #7d838c;
+    }
+}
