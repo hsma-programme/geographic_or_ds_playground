@@ -99,11 +99,11 @@ existing_sites = existing_sites[existing_sites["Existing"] == "Yes"][
 
 st.info(
     f"Your original choice was {selected_site}. With funding for a second site, "
-    "does the optimiser still keep it - or would it pick two completely different sites instead?"
+    "does the optimiser include it - or would it pick two completely different sites instead?"
 )
 
 run = st.button(
-    "Click here to run the optimiser", icon=":material/screen_search_desktop:"
+    "Click here to rerun the optimiser", icon=":material/screen_search_desktop:"
 )
 
 status = st.empty()
@@ -127,15 +127,22 @@ if run:
         time.sleep(duration / 100)
         progress.progress(i + 1)
 
+    gif_placeholder.empty()
+    status.write("")
+
+# Gated on the persisted flag, not the momentary `run` click, so results
+# survive any full rerun (a widget interaction elsewhere on the page, a
+# revisit after navigating away, a browser refresh) instead of vanishing
+# and forcing a full re-watch of the spinner/GIF theatre above just to see
+# them again. The animation itself only ever plays once, inside `if run:`.
+if st.session_state.get("optimise_6_sites_ran"):
     best_combo = solution.return_best_combination_site_names()
     best_additional = [i for i in best_combo if i not in existing_sites]
 
-    gif_placeholder.success(
+    st.success(
         f"Based on the impact on weighted average travel time alone, the optimiser "
         f"finds the best additional two sites to be {best_additional[0]} and {best_additional[1]}."
     )
-
-    status.write("")
 
     # site_names stays on the dataframe (not dropped) - a combination's two new
     # sites are joined with ", " for display only, while the underlying list is
@@ -143,7 +150,9 @@ if run:
     # site (some facility names contain a literal comma, e.g. "Colin Campbell
     # Court, Plymouth", so splitting the display string back apart isn't safe).
     solution_df_display = (
-        solution.solution_df.copy().drop(columns=["site_indices", "problem_df"]).round(2)
+        solution.solution_df.copy()
+        .drop(columns=["site_indices", "problem_df"])
+        .round(2)
     )
 
     solution_df_display["site"] = solution_df_display["site_names"].apply(
@@ -399,6 +408,12 @@ if run:
         )
 
     with tab_3:
+        st.caption(
+            "Each panel below zooms into one option from the Pareto front on the "
+            "previous tab - the ones no other combination beats on every measure "
+            "at once - showing exactly where it's strongest and where it gives "
+            "ground, ranked against every combination the optimiser evaluated."
+        )
         st.pyplot(solution.plot_pareto_facets())
 
 st.write("")

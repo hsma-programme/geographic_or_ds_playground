@@ -50,7 +50,17 @@ _PAGE_RESTORED = "_progress_page_restored"
 
 def progress_keys() -> list[str]:
     """The session-state keys that make up a user's durable progress."""
-    keys = ["pages_visited", "user_notes", CURRENT_PAGE_KEY]
+    keys = [
+        "pages_visited",
+        "user_notes",
+        CURRENT_PAGE_KEY,
+        # So the optimiser results (and the "But wait..." continuation on the
+        # 5-site page) survive a genuine browser refresh, not just in-session
+        # navigation - see the persisted-flag gating in Optimise_5_Sites.py /
+        # Optimise_6_Sites.py.
+        "optimise_5_sites_ran",
+        "optimise_6_sites_ran",
+    ]
     for i in SITE_SELECTION_SUBMITTABLE:
         keys.append(f"confirmed_site_{i}")
         keys.append(f"site_submitted_{i}")

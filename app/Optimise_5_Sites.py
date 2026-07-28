@@ -88,14 +88,21 @@ if run:
         time.sleep(duration / 100)
         progress.progress(i + 1)
 
+    gif_placeholder.empty()
+    status.write("")
+
+# Gated on the persisted flag, not the momentary `run` click, so results
+# survive any full rerun (a widget interaction elsewhere on the page, a
+# revisit after navigating away, a browser refresh) instead of vanishing
+# and forcing a full re-watch of the spinner/GIF theatre above just to see
+# them again. The animation itself only ever plays once, inside `if run:`.
+if st.session_state.get("optimise_5_sites_ran"):
     best_combo = solution.return_best_combination_site_names()
     best_additional = [i for i in best_combo if i not in existing_sites]
 
-    gif_placeholder.success(
+    st.success(
         f"Based on the impact on weighted average travel time alone, the optimiser finds the best additional site to be {best_additional[0]}."
     )
-
-    status.write("")
 
     solution_df_display = (
         solution.solution_df.copy()
@@ -348,14 +355,18 @@ Your solution is the:
         )
 
     with tab_3:
+        st.caption(
+            "Each panel below zooms into one option from the Pareto front on the "
+            "previous tab - the ones no other combination beats on every measure "
+            "at once - showing exactly where it's strongest and where it gives "
+            "ground, ranked against every combination the optimiser evaluated."
+        )
         st.pyplot(solution.plot_pareto_facets())
 
-if st.session_state.get("optimise_5_sites_ran"):
     st.divider()
     st.subheader("But wait...")
     if st.button(
-        "The head of the region just found £5m down the back of the sofa. "
-        "See what changes with two new sites.",
+        "Yet another person runs into the room...",
         key="btn_continue_optimise_6",
         icon=":material/celebration:",
         width="stretch",
