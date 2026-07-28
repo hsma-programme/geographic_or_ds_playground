@@ -17,10 +17,10 @@ intro_text = """
 
 char_count, reveal_speed = write_terminal_html(
     intro_text,
-    output_path="app/assets/terminal_working/demand.html",
+    output_path="app/assets/terminal_working/aha.html",
 )
 
-st.iframe("app/assets/terminal_working/demand.html", height=275)
+st.iframe("app/assets/terminal_working/aha.html", height=275)
 
 if st.button(
     "Click to boot the optimiser!",

@@ -17,20 +17,20 @@ st.title("Deprivation")
 intro_text = """
     <br><br>
 
-    You know that it has been found that women in more deprived areas have
-        <br>- lower breast cancer incidence.
-        <br>- significantly higher mortality rates.
-        <br>- poorer screening uptake.
-
+    You know that it has been found that people in more deprived areas often have
+    significantly higher mortality rates and poorer screening uptake.
     <br><br>
-
     You ask your analyst to show deprivation and they deliver following map, but do not offer any interpretation.
+    <br><br>
+    You turn around and they are gone. You are on your own.
     """
 
 # Once a decision has been made on this page, drop the analyst intro so a
 # revisit shows just the evidence and outcome.
 if not st.session_state.site_submitted_deprivation:
-    reveal_speed = 0 if st.session_state.deprivation_page_visited else TERMINAL_DEFAULT_SPEED
+    reveal_speed = (
+        0 if st.session_state.deprivation_page_visited else TERMINAL_DEFAULT_SPEED
+    )
     write_terminal_html(
         intro_text,
         output_path="app/assets/terminal_working/deprivation_page.html",

@@ -33,7 +33,7 @@ if not st.session_state.site_submitted_final:
         intro_text,
         output_path="app/assets/terminal_working/decide.html",
     )
-    st.iframe("app/assets/terminal_working/decide.html", height=300)
+    st.iframe("app/assets/terminal_working/decide.html", height=200)
 
     n = len(valid_decisions)
     distinct_sites = {decision["Site"] for decision in valid_decisions}
@@ -72,7 +72,21 @@ if not st.session_state.site_submitted_final:
         # Preserve the user's line breaks when rendering as markdown.
         st.info(notes.replace("\n", "  \n"))
 
-    st.write("<br><br>", unsafe_allow_html=True)
+    st.write("<br>", unsafe_allow_html=True)
+
+    intro_text = """
+    > Your final report and recommendation is due today.
+    <br><br>
+    > You pause, the cursor in your report flashing. What site are you going to recommend?
+    """
+
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/decide_2.html",
+    )
+    st.iframe("app/assets/terminal_working/decide_2.html", height=120)
+
+    st.write("<br>", unsafe_allow_html=True)
 
     selected_site_final = st.pills(
         "Select your final choice from all of the available sites by clicking on the site name below.",
