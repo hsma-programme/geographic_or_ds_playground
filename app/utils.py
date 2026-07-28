@@ -886,6 +886,17 @@ def setup_lokigi_site_problem_car_existing():
 
 
 @st.cache_resource
+def solve_car_existing_travel():
+    # D4 fix: the problem object was already cached, but Travel_Car.py called
+    # .solve(p=4) itself at page top-level, so it re-ran on every full rerun.
+    # p equals the number of existing sites here, so there's only one possible
+    # combination to evaluate - but solve() still walks the whole brute-force
+    # pipeline to find it, so caching the result (not just the problem) is what
+    # actually avoids the repeat work.
+    return setup_lokigi_site_problem_car_existing().solve(p=4)
+
+
+@st.cache_resource
 def setup_lokigi_site_problem_utilisation():
     # Utilisation is a baseline diagnostic of the *existing* sites: how much of
     # each site's capacity today's caseload uses. It needs neither travel matrix
@@ -937,6 +948,14 @@ def setup_lokigi_site_problem_pt():
     )
 
     return lokigi_site_problem
+
+
+@st.cache_resource
+def solve_pt_travel():
+    # D4 fix, PT counterpart of solve_car_existing_travel() above - see that
+    # function's comment for why caching the solve() call (not just the
+    # problem setup) is what actually removes the per-rerun cost.
+    return setup_lokigi_site_problem_pt().solve(p=4)
 
 
 def _setup_lokigi_site_problem_2sfca(travel_matrix):

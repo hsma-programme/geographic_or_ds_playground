@@ -1,7 +1,7 @@
 import streamlit as st
 from app.utils import (
     render_navigation,
-    setup_lokigi_site_problem_car_existing,
+    solve_car_existing_travel,
     page_styling,
     load_devon_geography,
     load_population_weighted_centroids,
@@ -17,9 +17,7 @@ page_styling()
 
 st.title("Travel Time - by Car")
 
-problem = setup_lokigi_site_problem_car_existing()
-
-solution = problem.solve(p=4)
+solution = solve_car_existing_travel()
 
 best_solution_df = solution.return_best_combination_details()["problem_df"].iloc[0]
 
