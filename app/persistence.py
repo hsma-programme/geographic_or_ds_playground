@@ -244,11 +244,12 @@ def render_reset_button(
 ) -> None:
     """A confirm-gated control that wipes progress and returns to the Homepage.
 
-    Reuses the single per-run store stashed by ``get_store()`` so it does not
-    create a duplicate localStorage component.
+    Lives in the sidebar so it's reachable from every page as a single,
+    consistent escape hatch. Reuses the single per-run store stashed by
+    ``get_store()`` so it does not create a duplicate localStorage component.
     """
 
-    with st.bottom.popover(label, width="stretch", icon=icon):
+    with st.sidebar.popover(label, width="stretch", icon=icon):
         st.write(
             "This will erase everything you've done so far and take you back to "
             "the start. This cannot be undone."

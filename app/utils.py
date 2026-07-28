@@ -515,11 +515,6 @@ def render_navigation(current: Investigation) -> None:
     ):
         st.switch_page("app/Decide.py")
 
-    # Escape hatch: wipe progress (session + browser storage) and start again.
-    from app.persistence import render_reset_button
-
-    render_reset_button(label="Start over", key="reset_nav")
-
     # Padding
     st.write("")
     st.write("")
@@ -763,6 +758,53 @@ def handle_scroll_to_top():
     )
 
 
+# Streamlit only honours `initial_sidebar_state` on a session's very first
+# page load - navigating between pages via st.switch_page/investigation tiles
+# reuses the same mounted app, so a newly-active page's own
+# initial_sidebar_state is silently ignored. This forces the sidebar open or
+# closed via JS instead, but only once per navigation to a given page (tracked
+# below) so it doesn't keep fighting a user who manually toggles it while
+# staying on that page.
+_SIDEBAR_FORCED_FOR_KEY = "_sidebar_forced_for_page"
+
+
+def force_sidebar_state(expanded: bool, page_key: str) -> None:
+    """Force the sidebar open/closed once per navigation to `page_key`."""
+    if st.session_state.get(_SIDEBAR_FORCED_FOR_KEY) == page_key:
+        return
+    st.session_state[_SIDEBAR_FORCED_FOR_KEY] = page_key
+
+    nonce = st.session_state.get("_sidebar_force_nonce", 0) + 1
+    st.session_state["_sidebar_force_nonce"] = nonce
+    desired = "true" if expanded else "false"
+
+    st.iframe(
+        f"""<!DOCTYPE html>
+<html><body><script>
+    // {nonce}
+    const doc = window.parent.document;
+    let attempts = 0;
+    const tryToggle = () => {{
+        attempts += 1;
+        const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sidebar) {{
+            if (attempts < 40) setTimeout(tryToggle, 100);
+            return;
+        }}
+        const isExpanded = sidebar.getAttribute("aria-expanded") === "true";
+        if (isExpanded === {desired}) return;
+        const btn = {desired}
+            ? doc.querySelector('[data-testid="stExpandSidebarButton"]')
+            : doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+        if (btn) btn.click();
+        else if (attempts < 40) setTimeout(tryToggle, 100);
+    }};
+    tryToggle();
+</script></body></html>""",
+        height=1,
+    )
+
+
 def select_site_from_current_evidence():
 
     devon_sites = load_devon_sites()
@@ -957,6 +999,7 @@ def render_notes_textbox(key=None):
         label_visibility="hidden",
         key=_NOTES_WIDGET_KEY,
         on_change=_persist_notes,
+        height=350,
     )
 
     st.write("")

@@ -14,6 +14,15 @@ from num2words import num2words
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
 
+# Unlike every other page, the sidebar's expand toggle stays hidden here while
+# collapsed - the homepage should read as a clean welcome screen, with no
+# invitation to open a sidebar that (before the user has started) has nothing
+# but an empty notepad in it.
+st.markdown(
+    "<style>[data-testid='stExpandSidebarButton'] { display: none }</style>",
+    unsafe_allow_html=True,
+)
+
 st.title("Welcome")
 
 cola, colb = st.columns([0.7, 0.3])
@@ -70,11 +79,3 @@ with col2:
 
 with col3:
     investigation_button(TRAVEL_CAR)
-
-# Escape hatch: if a returning session was restored mid-flow, let the user wipe
-# it and begin again from a clean slate.
-if st.session_state.pages_visited:
-    st.write("")
-    from app.persistence import render_reset_button
-
-    render_reset_button(label="Start over from the beginning", key="reset_home")

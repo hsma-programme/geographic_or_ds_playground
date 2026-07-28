@@ -6,14 +6,13 @@ from app.utils import (
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
 )
-from app.persistence import render_reset_button
 import time
 from PIL import Image
 import pandas as pd
 import pickle
 from lokigi.multiobjective import ParetoMetric
 
-st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
 
 st.title("Optimise - again")
@@ -415,6 +414,3 @@ if st.session_state.get("optimise_6_sites_ran"):
             "ground, ranked against every combination the optimiser evaluated."
         )
         st.pyplot(solution.plot_pareto_facets())
-
-st.write("")
-render_reset_button(label="Start the whole exercise again", key="reset_opt6")

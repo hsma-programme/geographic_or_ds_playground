@@ -1,6 +1,8 @@
 import streamlit as st
 from app.utils import write_terminal_html
 
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
+
 intro_text = """
 > But wait!
 <br><br>

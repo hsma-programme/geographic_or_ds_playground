@@ -3,13 +3,12 @@ from app.utils import (
     write_terminal_html,
     render_navigation,
     page_styling,
-    render_notes_textbox,
     TERMINAL_DEFAULT_SPEED,
 )
 from app.utils_investigations import DEPRIVATION
 from app.maps import render_deprivation_map, make_selection_map
 
-st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
 
 
@@ -43,9 +42,6 @@ if not st.session_state.site_submitted_deprivation:
 
 select_map = make_selection_map(render_deprivation_map, "deprivation")
 select_map()
-
-
-render_notes_textbox()
 
 if st.session_state.site_submitted_deprivation:
     render_navigation(DEPRIVATION)

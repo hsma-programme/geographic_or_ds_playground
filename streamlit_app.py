@@ -1,11 +1,17 @@
 import streamlit as st
-from app.utils import SITE_SELECTION_SUBMITTABLE, handle_scroll_to_top
+from app.utils import (
+    SITE_SELECTION_SUBMITTABLE,
+    handle_scroll_to_top,
+    render_notes_textbox,
+    force_sidebar_state,
+)
 from app.persistence import (
     get_store,
     load_into_session,
     save,
     maybe_restore_page,
     record_current_page,
+    render_reset_button,
     CURRENT_PAGE_KEY,
 )
 
@@ -145,6 +151,23 @@ record_current_page(pg)
 
 # If a decision was just submitted, scroll back to the top of the page.
 handle_scroll_to_top()
+
+# The sidebar should start collapsed on the homepage and expanded everywhere
+# else, but Streamlit only honours initial_sidebar_state on a session's first
+# load - not on later in-app navigation - so force it explicitly.
+force_sidebar_state(expanded=pg is not pages[0], page_key=pg.url_path)
+
+# The running notepad and the "start over" escape hatch live in the sidebar so
+# they're available consistently on every page, rather than only on the pages
+# that happened to embed them inline. No point offering "start over" before
+# there's any progress to lose.
+with st.sidebar:
+    render_notes_textbox()
+    if st.session_state.pages_visited:
+        st.divider()
+        render_reset_button(
+            label="Start over from the beginning", key="reset_sidebar"
+        )
 
 pg.run()
 

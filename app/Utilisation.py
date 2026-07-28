@@ -3,12 +3,11 @@ from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
-    render_notes_textbox,
 )
 from app.utils_investigations import UTILISATION
 from app.maps import render_utilisation_map, make_selection_map
 
-st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
 
 st.title("Current CDC Utilisation")
@@ -36,8 +35,6 @@ if not st.session_state.site_submitted_utilisation:
 
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")
 utilisation_selection_map()
-
-render_notes_textbox()
 
 if st.session_state.site_submitted_utilisation:
     render_navigation(UTILISATION)

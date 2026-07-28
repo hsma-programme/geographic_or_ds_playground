@@ -3,14 +3,13 @@ from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
-    render_notes_textbox,
     setup_lokigi_site_problem_2sfca_car,
 )
 from app.utils_investigations import TWO_SFCA_CAR
 from app.maps import render_2sfca_map, make_selection_map
 from functools import partial
 
-st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
 
 st.title("Who Can Actually Reach a CDC? (by car)")
@@ -47,8 +46,6 @@ sfca_car_selection_map = make_selection_map(
     "2sfca_car",
 )
 sfca_car_selection_map()
-
-render_notes_textbox()
 
 if st.session_state.site_submitted_2sfca_car:
     render_navigation(TWO_SFCA_CAR)
