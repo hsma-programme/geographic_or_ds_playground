@@ -237,7 +237,8 @@ def render_reset_button(
     Reuses the single per-run store stashed by ``get_store()`` so it does not
     create a duplicate localStorage component.
     """
-    with st.popover(label, use_container_width=True, icon=icon):
+
+    with st.bottom.popover(label, width="stretch", icon=icon):
         st.write(
             "This will erase everything you've done so far and take you back to "
             "the start. This cannot be undone."
@@ -246,7 +247,7 @@ def render_reset_button(
             "Yes, clear my progress and restart",
             key=f"{key}_confirm",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         ):
             reset_progress()
             st.switch_page("app/Homepage.py")
