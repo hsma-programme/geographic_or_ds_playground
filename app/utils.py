@@ -633,6 +633,17 @@ def analyses_remaining() -> int:
     return MAXIMUM_BRIEFINGS - analyses_used()
 
 
+def total_analyst_days() -> float:
+    """Cumulative analyst_days across every unique page visited so far.
+
+    Purely informational - see render_capacity_status(). The briefing count
+    is the only thing that actually gates progress; this never constrains
+    anything, it just makes the (very uneven) real cost behind each flat
+    "1 briefing" visible.
+    """
+    return sum(v["analyst_days"] for v in st.session_state.pages_visited)
+
+
 def capacity_exhausted() -> bool:
     """True once every briefing has been spent."""
     return analyses_remaining() <= 0
@@ -661,17 +672,26 @@ def render_capacity_status() -> None:
             "time to make your decision.",
             icon=":material/hourglass_disabled:",
         )
-        return
-
-    plural = "briefing" if remaining == 1 else "briefings"
-    header = f"You can request **{remaining}** more {plural}."
-    message = _capacity_message(remaining)
-    body = f"{header}\n\n{message}" if message else header
-
-    if remaining <= 2:
-        st.warning(body, icon=":material/hourglass_bottom:")
     else:
-        st.info(body, icon=":material/hourglass_top:")
+        plural = "briefing" if remaining == 1 else "briefings"
+        header = f"You can request **{remaining}** more {plural}."
+        message = _capacity_message(remaining)
+        body = f"{header}\n\n{message}" if message else header
+
+        if remaining <= 2:
+            st.warning(body, icon=":material/hourglass_bottom:")
+        else:
+            st.info(body, icon=":material/hourglass_top:")
+
+    if st.session_state.pages_visited:
+        days = total_analyst_days()
+        n = len(st.session_state.pages_visited)
+        briefing_word = "briefing" if n == 1 else "briefings"
+        st.caption(
+            f"Behind the scenes: your analyst has logged **{days:g} days** of work "
+            f"across those {n} {briefing_word} so far - a reminder that the "
+            "briefing count and the real cost aren't the same thing."
+        )
 
 
 def page_styling():

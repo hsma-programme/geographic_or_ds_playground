@@ -29,6 +29,8 @@ intro_text = f"""
 <br><br>
 > Due to capacity constraints, your analyst can provide you with a maximum of {num2words(MAXIMUM_BRIEFINGS)} briefings on areas of your choosing.
 <br><br>
+> Some of these will take your analyst an afternoon; others the better part of a fortnight. The briefing count does not know the difference - much like most budgets don't.
+<br><br>
 > The frazzled-looking data team lead has assured you it will be plenty.
 <br><br>
 > What is your first request to your data analyst?
