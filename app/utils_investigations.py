@@ -63,7 +63,7 @@ TRAVEL_CAR = Investigation(
     prerequisites=[],
     parent=None,
     recommended_next=["travel_pt", "demand"],
-    analyst_prompt=("Show me travel times to existing CDCs."),
+    analyst_prompt=("Show me travel times to existing CDCs by car."),
     is_entry_point=True,
     analyst_days=3,
     icon="directions_car",
@@ -78,10 +78,11 @@ TRAVEL_PT = Investigation(
     parent="travel_car",
     recommended_next=["travel_car", "demand"],
     analyst_prompt=(
-        "Look at how travel times are different if patients are using public transport."
+        "Look at travel times by car if patients are using public transport."
     ),
     is_entry_point=False,
     analyst_days=5,
+    icon="train",
 )
 
 HOTSPOTS_DEMAND_DEPRIVATION = Investigation(
@@ -103,6 +104,7 @@ HOTSPOTS_DEMAND_DEPRIVATION = Investigation(
     analyst_prompt=("Combine demand and deprivation to identify priority areas."),
     is_entry_point=False,
     analyst_days=1,
+    icon="emergency_heat",
 )
 
 HOTSPOTS_DEMAND_TRAVEL = Investigation(
@@ -123,6 +125,7 @@ HOTSPOTS_DEMAND_TRAVEL = Investigation(
     ),
     is_entry_point=False,
     analyst_days=1,
+    icon="car_crash",
 )
 
 HOTSPOTS_DEPRIVATION_TRAVEL = Investigation(
@@ -140,6 +143,7 @@ HOTSPOTS_DEPRIVATION_TRAVEL = Investigation(
     ),
     is_entry_point=False,
     analyst_days=1,
+    icon="disc_full",
 )
 
 # NOTE: Catchment_Isochrones_car.py / Catchment_Isochrones_pt.py pages have been
@@ -158,13 +162,13 @@ TWO_SFCA_CAR = Investigation(
     category=["accessibility", "capacity"],
     prerequisites=["utilisation", "travel_car"],
     parent="utilisation",
-    recommended_next=["2sfca_pt", "travel_car"],
+    recommended_next=["travel_pt", "2sfca_pt"],
     analyst_prompt=(
-        "Combine capacity, demand and car travel to show who can actually reach a CDC."
+        "Combine capacity, demand and car travel to show who can actually make use of a CDC."
     ),
     is_entry_point=False,
     analyst_days=3,
-    icon="directions_car",
+    icon="ambulance",
 )
 
 TWO_SFCA_PT = Investigation(
@@ -173,14 +177,14 @@ TWO_SFCA_PT = Investigation(
     page="app/Catchment_2sfca_pt.py",
     category=["accessibility", "capacity"],
     prerequisites=["utilisation", "travel_pt"],
-    parent="2sfca_car",
-    recommended_next=["2sfca_car", "travel_pt"],
+    parent="utilisation",
+    recommended_next=["travel_car", "2sfca_car"],
     analyst_prompt=(
-        "Recalculate who can reach a CDC when patients rely on public transport."
+        "Combine capacity, demand and travel on public transport to show who can actually make use of a CDC."
     ),
     is_entry_point=False,
     analyst_days=4,
-    icon="directions_bus",
+    icon="departure_board",
 )
 
 UTILISATION = Investigation(
@@ -194,6 +198,7 @@ UTILISATION = Investigation(
     recommended_next=["2sfca_car", "demand", "projected_demand", "travel_car"],
     analyst_prompt="Show me how well-used the existing four CDCs are.",
     analyst_days=2,
+    icon="reduce_capacity",
 )
 
 PROJECTED_DEMAND = Investigation(
@@ -214,6 +219,7 @@ PROJECTED_DEMAND = Investigation(
     ],
     analyst_prompt="Show me how the 50-85 population is projected to change across Devon in the next 10 years.",
     analyst_days=2,
+    icon="show_chart",
 )
 
 # At the bottom of investigations.py

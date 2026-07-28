@@ -21,9 +21,9 @@ char_count, reveal_speed = write_terminal_html(
 st.iframe("app/assets/terminal_working/demand.html", height=275)
 
 if st.button(
-    "Make your choice.",
+    "Click to boot the optimiser!",
     key="btn_optimise_5_sites",
-    icon=":material/balance:",
-    use_container_width=True,
+    icon=":material/rocket_launch:",
+    width="stretch",
 ):
     st.switch_page("app/Optimise_5_Sites.py")

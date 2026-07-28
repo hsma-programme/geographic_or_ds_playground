@@ -58,7 +58,9 @@ st.info(
     f"You selected {selected_site} as the best overall solution.\n\nDoes the optimiser agree?"
 )
 
-run = st.button("Click here to run the optimiser")
+run = st.button(
+    "Click here to run the optimiser", icon=":material/screen_search_desktop:"
+)
 
 status = st.empty()
 
