@@ -21,7 +21,7 @@ intro_text = """
 <br><br>
 > They remind you that people in more deprived areas already face worse outcomes and lower screening uptake. Adding a long, awkward journey on top of that is exactly the sort of double disadvantage a fair service is meant to avoid.
 <br><br>
-> They tell you to use the buttons above the map to switch views. "Priority typology" colours every area by whether it is high or low on deprivation and on access - the red areas are highly deprived *and* have poor access. "Statistical hotspots" only lights up clusters of deprived, poorly-served areas that are unlikely to be down to chance.
+> They tell you to use the buttons above the map to switch views. "Priority typology" grades every area low, medium or high on deprivation and on access - only the areas that are highly deprived *and* have poor access show up red. An area that's deprived but reasonably well served, or poorly served but not deprived, shows up grey: worth watching, not the worst case. "Statistical hotspots" only lights up clusters of deprived, poorly-served areas that are unlikely to be down to chance.
 <br><br>
 > They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
 <br><br>

@@ -5,10 +5,10 @@ GeoDataFrame instead of running Local Moran's I (spatial weights + permutation
 inference over 729 LSOAs) live on every session.
 
 The pickle holds the GeoDataFrame returned by lokigi's
-SiteProblem.get_hotspots(what="demand_equity", n_bins=2): the Devon LSOA geometry
+SiteProblem.get_hotspots(what="demand_equity", n_bins=3): the Devon LSOA geometry
 plus the cluster_type, attribute_typology, combined_score, p_value and
-local_moran_i columns the page colours and tooltips by. n_bins=2 gives the four
-High/Low demand x deprivation typology classes.
+local_moran_i columns the page colours and tooltips by. n_bins=3 gives the nine
+Low/Medium/High demand x deprivation typology classes.
 
 A pickle (rather than a GeoPackage) is used so the Arrow-backed string /
 categorical columns lokigi produces survive the round-trip unchanged.
@@ -46,7 +46,7 @@ def main():
         disadvantaged_end="low",  # decile 1 = most deprived
     )
 
-    hotspots_gdf = problem.get_hotspots(what="demand_equity", n_bins=2)
+    hotspots_gdf = problem.get_hotspots(what="demand_equity", n_bins=3)
 
     hotspots_gdf.to_pickle(OUTPUT_PATH)
 

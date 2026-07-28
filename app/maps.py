@@ -868,26 +868,77 @@ def render_travel_maps(best_solution_gdf):
 # so it renders reliably in st_folium. The priority typology and the statistical
 # clusters are two views of the same precomputed data, shared across every
 # hotspot page.
-_DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = {
-    "High Demand / High Deprivation": "#d7191c",  # priority - act here first
-    "High Demand / Low Deprivation": "#dd7b26",  # worth watching (demand-led)
-    "Low Demand / High Deprivation": "#ffdf8d",  # worth watching (deprivation-led)
-    "Low Demand / Low Deprivation": "#7e7e7e",  # baseline
-}
+# n_bins=3 splits each axis into Low/Medium/High (or Good/Medium/Poor) thirds
+# rather than n_bins=2's median split. With a median split, "High" only means
+# "above the Devon median", so 3 of the 4 quadrants (everything except
+# Low/Low) read as an "attention" colour - roughly 75% of LSOAs, even though
+# most of that is only mildly off on a single axis. Colouring the 3x3 grid by
+# *combined* severity (each axis scored Low/Good=0, Medium=1, High/Poor=2,
+# summed to 0-4) fixes that: only the single most extreme corner (score 4)
+# reads red, the two cells adjacent to it (score 3) read amber/yellow, and
+# the three cells where the axes disagree or both sit in the middle (score 2)
+# read as neutral grey - so the map's use of "red" tracks genuine severity
+# rather than "above average on one thing". The two score-3 colours are kept
+# distinct (rather than collapsed, as lokigi's own severity scoring does) so
+# a "worth watching" area still shows *which* axis is driving it, matching
+# this app's existing convention from the 2x2 typology.
+_TYPOLOGY_SEVERITY = {"Low": 0, "Medium": 1, "High": 2, "Good": 0, "Poor": 2}
+_TYPOLOGY_PRIORITY = "#d7191c"  # score 4 - the single worst corner
+_TYPOLOGY_LEADING_A = "#dd7b26"  # score 3, driven by the first axis
+_TYPOLOGY_LEADING_B = "#ffdf8d"  # score 3, driven by the second axis
+_TYPOLOGY_BALANCED = "#7e7e7e"  # score 2 - medium/medium, or the axes cancel out
+_TYPOLOGY_LEANING_GOOD = "#a6bddb"  # score 1
+_TYPOLOGY_DOING_WELL = "#2c7bb6"  # score 0 - the single best corner
 
-_DEMAND_TRAVEL_TYPOLOGY_COLOURS = {
-    "High Demand / Poor Access": "#d7191c",  # priority - act here first
-    "High Demand / Good Access": "#dd7b26",  # worth watching (demand-led)
-    "Low Demand / Poor Access": "#ffdf8d",  # worth watching (access-led)
-    "Low Demand / Good Access": "#7e7e7e",  # baseline
-}
 
-_DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = {
-    "High Deprivation / Poor Access": "#d7191c",  # priority - act here first
-    "High Deprivation / Good Access": "#dd7b26",  # worth watching (deprivation-led)
-    "Low Deprivation / Poor Access": "#ffdf8d",  # worth watching (access-led)
-    "Low Deprivation / Good Access": "#7e7e7e",  # baseline
-}
+def _typology_colour_map(axis_a_levels, axis_a_name, axis_b_levels, axis_b_name):
+    """Build an ordered {label: colour} dict, worst to best, for every
+    combination of a 3-level axis_a (e.g. Low/Medium/High Demand) and axis_b
+    (e.g. Good/Medium/Poor Access), coloured by combined severity score. The
+    label format (f"{a} {axis_a_name} / {b} {axis_b_name}") matches lokigi's
+    own attribute_typology string exactly."""
+
+    def colour(a, b, score):
+        if score == 4:
+            return _TYPOLOGY_PRIORITY
+        if score == 3:
+            leading_a = _TYPOLOGY_SEVERITY[a] > _TYPOLOGY_SEVERITY[b]
+            return _TYPOLOGY_LEADING_A if leading_a else _TYPOLOGY_LEADING_B
+        if score == 2:
+            return _TYPOLOGY_BALANCED
+        if score == 1:
+            return _TYPOLOGY_LEANING_GOOD
+        return _TYPOLOGY_DOING_WELL
+
+    cells = [
+        (f"{a} {axis_a_name} / {b} {axis_b_name}", _TYPOLOGY_SEVERITY[a], a, b)
+        for a in axis_a_levels
+        for b in axis_b_levels
+    ]
+    # Worst -> best, then (for score-3 ties) the axis_a-led cell before the
+    # axis_b-led one, so the legend lists red, amber, yellow, ... in order.
+    cells.sort(key=lambda c: (-(c[1] + _TYPOLOGY_SEVERITY[c[3]]), -c[1]))
+
+    return {
+        label: colour(a, b, sev_a + _TYPOLOGY_SEVERITY[b])
+        for label, sev_a, a, b in cells
+    }
+
+
+_TERCILE_LEVELS = ["Low", "Medium", "High"]
+_ACCESS_LEVELS = ["Good", "Medium", "Poor"]
+
+_DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Demand", _TERCILE_LEVELS, "Deprivation"
+)
+
+_DEMAND_TRAVEL_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Demand", _ACCESS_LEVELS, "Access"
+)
+
+_DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Deprivation", _ACCESS_LEVELS, "Access"
+)
 
 _CLUSTER_COLOURS = {
     "Hotspot": "#d7191c",  # high-high

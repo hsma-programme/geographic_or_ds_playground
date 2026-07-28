@@ -9,7 +9,7 @@ analysis: the travel time to each LSOA's nearest site only exists once the
 problem has been solved. We solve the existing-CDCs / car-travel problem exactly
 as the Travel_Car page does (existing sites + the car travel matrix + solve(p=4)),
 add the IMD deprivation data, then ask lokigi for
-get_hotspots(what="travel_equity", n_bins=2).
+get_hotspots(what="travel_equity", n_bins=3).
 
 The demand ID column is renamed to "LSOA21NM" here so that the demand/travel key
 and the region-geometry key share one column name (lokigi's solution-level travel
@@ -20,8 +20,8 @@ from the Travel_Car page.
 
 The pickle holds the Devon LSOA geometry plus the cluster_type,
 attribute_typology, combined_score, p_value, local_moran_i and min_cost columns
-the page colours and tooltips by. n_bins=2 gives the four Low/High deprivation x
-Good/Poor access typology classes.
+the page colours and tooltips by. n_bins=3 gives the nine Low/Medium/High
+deprivation x Good/Medium/Poor access typology classes.
 
 A pickle (rather than a GeoPackage) is used so the Arrow-backed string /
 categorical columns lokigi produces survive the round-trip unchanged.
@@ -72,7 +72,7 @@ def main():
 
     solution = problem.solve(p=4)
 
-    hotspots_gdf = solution.get_hotspots(what="travel_equity", n_bins=2)
+    hotspots_gdf = solution.get_hotspots(what="travel_equity", n_bins=3)
 
     hotspots_gdf.to_pickle(OUTPUT_PATH)
 

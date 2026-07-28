@@ -21,7 +21,7 @@ intro_text = """
 <br><br>
 > They explain that on their own, a busy area or a deprived area is only half the story. What you really want are the places that are *both*: high demand and high deprivation together.
 <br><br>
-> They tell you to use the buttons above the map to switch views. "Priority typology" colours every area by whether it is high or low on demand and on deprivation - the red areas are high on both. "Statistical hotspots" is fussier: it only lights up clusters that are unlikely to be down to chance.
+> They tell you to use the buttons above the map to switch views. "Priority typology" grades every area low, medium or high on demand and on deprivation - only the areas that are high on *both* show up red. Areas that are only high on one, or sit in the middle on both, show up grey: worth a second look, not a five-alarm fire. "Statistical hotspots" is fussier still: it only lights up clusters that are unlikely to be down to chance.
 <br><br>
 > They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
 <br><br>

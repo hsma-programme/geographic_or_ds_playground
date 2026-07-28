@@ -21,7 +21,7 @@ intro_text = """
 <br><br>
 > They explain that a long drive only really matters where lots of people need the service. An empty moor with a two-hour drive is less of a worry than a busy town that is still awkward to reach.
 <br><br>
-> They tell you to use the buttons above the map to switch views. "Priority typology" colours every area by whether it is high or low on demand and on access - the red areas have high demand *and* poor access. "Statistical hotspots" only lights up clusters of high-demand, poor-access areas that are unlikely to be down to chance.
+> They tell you to use the buttons above the map to switch views. "Priority typology" grades every area low, medium or high on demand and on access - only the areas with high demand *and* poor access show up red. An area with high demand but only middling access, or poor access but low demand, shows up grey: a mixed picture, not the worst case. "Statistical hotspots" only lights up clusters of high-demand, poor-access areas that are unlikely to be down to chance.
 <br><br>
 > They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
 <br><br>
