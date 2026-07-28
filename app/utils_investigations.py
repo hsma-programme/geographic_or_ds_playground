@@ -167,7 +167,7 @@ TWO_SFCA_CAR = Investigation(
         "Combine capacity, demand and car travel to show who can actually make use of a CDC."
     ),
     is_entry_point=False,
-    analyst_days=3,
+    analyst_days=2,
     icon="ambulance",
 )
 
@@ -183,7 +183,7 @@ TWO_SFCA_PT = Investigation(
         "Combine capacity, demand and travel on public transport to show who can actually make use of a CDC."
     ),
     is_entry_point=False,
-    analyst_days=4,
+    analyst_days=2.5,
     icon="departure_board",
 )
 
