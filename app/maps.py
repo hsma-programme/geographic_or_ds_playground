@@ -870,31 +870,35 @@ def render_travel_maps(best_solution_gdf):
 # hotspot page.
 ## D2 fix: the two "worth watching" categories per typology used to share the
 # same orange (#fdae61), so they were indistinguishable on the map itself
-# without hovering for the tooltip. Each pair now gets a distinct amber shade -
-# burnt orange for the variant where the *first-named* factor is the elevated
-# one, pale gold for the variant where the *second-named* factor is. #f16913
-# vs #fec44f gives ~14 points of lightness and ~17 degrees of hue separation
-# (the earlier #fdae61/#fee08b pairing had only ~4 points and ~15 degrees) -
-# both still read as a lower tier than the priority red and higher than the
-# grey baseline, just no longer visually merged into one colour.
+# without hovering for the tooltip. Each pair now gets a distinct, muted amber
+# shade - dusty orange for the variant where the *first-named* factor is the
+# elevated one, muted gold for the variant where the *second-named* factor is.
+# An earlier, more saturated attempt (#f16913/#fec44f) fixed the two "worth
+# watching" colours being indistinguishable from each other, but #f16913 was
+# then too close in lightness to the priority red (only ~4 points apart) and
+# read as competing with it. #d98c4a/#e8ca7d desaturate both (~65-70% vs the
+# priority's ~79%) and sit ~10-13 points lighter than the priority red, while
+# staying ~13 points of lightness / ~15 degrees of hue apart from each other -
+# clearly a lower, calmer tier than the priority red, distinct from the grey
+# baseline, and distinct from one another.
 _DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = {
     "High Demand / High Deprivation": "#d7191c",  # priority - act here first
-    "High Demand / Low Deprivation": "#f16913",  # worth watching (demand-led)
-    "Low Demand / High Deprivation": "#fec44f",  # worth watching (deprivation-led)
+    "High Demand / Low Deprivation": "#d98c4a",  # worth watching (demand-led)
+    "Low Demand / High Deprivation": "#e8ca7d",  # worth watching (deprivation-led)
     "Low Demand / Low Deprivation": "#bdbdbd",  # baseline
 }
 
 _DEMAND_TRAVEL_TYPOLOGY_COLOURS = {
     "High Demand / Poor Access": "#d7191c",  # priority - act here first
-    "High Demand / Good Access": "#f16913",  # worth watching (demand-led)
-    "Low Demand / Poor Access": "#fec44f",  # worth watching (access-led)
+    "High Demand / Good Access": "#d98c4a",  # worth watching (demand-led)
+    "Low Demand / Poor Access": "#e8ca7d",  # worth watching (access-led)
     "Low Demand / Good Access": "#bdbdbd",  # baseline
 }
 
 _DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = {
     "High Deprivation / Poor Access": "#d7191c",  # priority - act here first
-    "High Deprivation / Good Access": "#f16913",  # worth watching (deprivation-led)
-    "Low Deprivation / Poor Access": "#fec44f",  # worth watching (access-led)
+    "High Deprivation / Good Access": "#d98c4a",  # worth watching (deprivation-led)
+    "Low Deprivation / Poor Access": "#e8ca7d",  # worth watching (access-led)
     "Low Deprivation / Good Access": "#bdbdbd",  # baseline
 }
 
