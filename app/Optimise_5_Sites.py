@@ -1,5 +1,10 @@
 import streamlit as st
-from app.utils import page_styling, load_devon_sites, RANK_METRIC_ASCENDING
+from app.utils import (
+    page_styling,
+    load_devon_sites,
+    RANK_METRIC_ASCENDING,
+    RANK_METRIC_LABELS,
+)
 from app.persistence import render_reset_button
 import time
 from PIL import Image
@@ -201,12 +206,13 @@ Your solution is the:
                     "proportion_within_coverage_threshold",
                     "inter_tertile_ratio",
                 ],
+                format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
             )
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {rank_on}")
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[rank_on]}")
                 ax = solution.plot_best_combination(
                     solution_rank=1,
                     rank_on=rank_on,

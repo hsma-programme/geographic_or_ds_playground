@@ -22,7 +22,7 @@ if not st.session_state.site_submitted_final:
             decisions.append(st.session_state[f"confirmed_site_{key}"])
 
     decision_string = [
-        f"You chose {decision['Site']} for {decision['What'].lower().replace('_', ' ')}"
+        f"You chose {decision['Site']} for {decision['What']}"
         for decision in decisions
         if decision is not None
     ]

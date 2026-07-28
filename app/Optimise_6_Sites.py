@@ -4,6 +4,7 @@ from app.utils import (
     load_devon_sites,
     write_terminal_html,
     RANK_METRIC_ASCENDING,
+    RANK_METRIC_LABELS,
 )
 from app.persistence import render_reset_button
 import time
@@ -230,6 +231,7 @@ if run:
                     "proportion_within_coverage_threshold",
                     "inter_tertile_ratio",
                 ],
+                format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
                 key="rank_on_6",
             )
@@ -246,7 +248,7 @@ if run:
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {rank_on}")
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[rank_on]}")
                 ax = solution.plot_best_combination(
                     solution_rank=1,
                     rank_on=rank_on,
@@ -262,22 +264,24 @@ if run:
                 )
                 st.pyplot(ax.figure)
 
+            rank_on_label = RANK_METRIC_LABELS[rank_on]
+
             st.caption(
                 f"Out of all {n_combinations} possible two-site combinations, this is "
                 f"the best one that still keeps **{selected_site}** - it ranks "
-                f"**{ordinal(comparison_rank)}** overall by {rank_on}."
+                f"**{ordinal(comparison_rank)}** overall by {rank_on_label}."
             )
 
             naive_pair = naive_top_two_pair(rank_on, ascending)
             best_pair = true_best_pair(rank_on, ascending)
             if naive_pair == best_pair:
                 st.caption(
-                    f"For {rank_on}, simply combining the two best *individual* sites "
-                    "from the single-site page would have found this same best pair."
+                    f"For {rank_on_label}, simply combining the two best *individual* "
+                    "sites from the single-site page would have found this same best pair."
                 )
             else:
                 st.caption(
-                    f"For {rank_on}, the two best *individual* sites from the "
+                    f"For {rank_on_label}, the two best *individual* sites from the "
                     f"single-site page were **{' and '.join(sorted(naive_pair))}** - "
                     "but that isn't the best pair (shown on the left). Sites compete "
                     "for the same demand, so the jointly optimal choice can differ "

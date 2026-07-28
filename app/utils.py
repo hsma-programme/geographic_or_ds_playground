@@ -34,6 +34,20 @@ RANK_METRIC_ASCENDING = {
     "inter_tertile_ratio": True,
 }
 
+# Human-readable phrasing for each optimiser metric column, for embedding in
+# sentences (lower-case) or as st.radio options (via .capitalize()). Keeps
+# raw pandas column names like "proportion_within_coverage_threshold" off the
+# screen - they're meaningful to whoever wrote the analysis, not the exec
+# reading the page.
+RANK_METRIC_LABELS = {
+    "weighted_average": "weighted average travel time",
+    "unweighted_average": "unweighted average travel time",
+    "90th_percentile": "90th percentile travel time",
+    "max": "maximum travel time",
+    "proportion_within_coverage_threshold": "coverage within the travel time threshold",
+    "inter_tertile_ratio": "equity (inter-tertile ratio)",
+}
+
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
     "deprivation",
@@ -48,6 +62,25 @@ SITE_SELECTION_SUBMITTABLE = [
     "deprivation_travel_hotspots",
     "final",
 ]
+
+# Human-readable phrasing for each SITE_SELECTION_SUBMITTABLE key, for
+# embedding in sentences (lower-case) describing which page a site choice
+# came from - e.g. "You chose X for travel by car" rather than the raw
+# "car_travel" key.
+SITE_SELECTION_LABELS = {
+    "demand": "demand",
+    "deprivation": "deprivation",
+    "car_travel": "travel by car",
+    "public_transport": "travel by public transport",
+    "2sfca_car": "accessibility by car (2SFCA)",
+    "2sfca_pt": "accessibility by public transport (2SFCA)",
+    "utilisation": "CDC utilisation",
+    "projected_demand": "projected demand",
+    "demand_deprivation_hotspots": "demand & deprivation hotspots",
+    "demand_travel_hotspots": "demand & travel hotspots",
+    "deprivation_travel_hotspots": "deprivation & travel hotspots",
+    "final": "your final decision",
+}
 
 
 # Load datasets

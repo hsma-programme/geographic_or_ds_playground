@@ -9,6 +9,7 @@ from app.utils import (
     load_population_weighted_centroids,
     request_scroll_to_top,
     setup_lokigi_site_problem_utilisation,
+    SITE_SELECTION_LABELS,
 )
 import streamlit as st
 import folium
@@ -1016,10 +1017,11 @@ def make_selection_map(map_render_fn, key_suffix):
     def selection_map():
         confirmed_key = f"confirmed_site_{key_suffix}"
         submitted_key = f"site_submitted_{key_suffix}"
+        label = SITE_SELECTION_LABELS.get(key_suffix, key_suffix)
 
         if st.session_state[submitted_key]:
             st.info(
-                f"You have submitted a site recommendation based on {key_suffix} "
+                f"You have submitted a site recommendation based on {label} "
                 f"({st.session_state[confirmed_key]['Site']})."
                 "\n\nPlease use the buttons below to request your next analysis."
             )
@@ -1054,7 +1056,7 @@ def make_selection_map(map_render_fn, key_suffix):
         else:
             st.success(f"Selected Site = {selected_site}")
             st.session_state[confirmed_key] = {
-                "What": key_suffix.capitalize(),
+                "What": label,
                 "Site": selected_site,
             }
 
