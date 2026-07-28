@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import geopandas
 import html
+import re
 from app.utils_investigations import ALL_INVESTIGATIONS, Investigation
 import base64
 from PIL import Image
@@ -12,15 +13,75 @@ from lokigi.site import SiteProblem
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
-MAXIMUM_BRIEFINGS = 5
+MAXIMUM_BRIEFINGS = 6
+
+# Shared basemap for every folium/leaflet map in the app, so switching styles
+# only requires changing this one value. CartoDB Voyager keeps roads/labels
+# visible (unlike Positron) while staying more muted than default OpenStreetMap.
+BASEMAP_TILES = "cartodbvoyager"
+
+# Which direction "best" sorts in for each optimiser solution_df metric - lower
+# is better for every travel-time-style column, higher is better for coverage.
+# Used on the Optimise pages so a rank looked up externally (e.g. "where does
+# my chosen site fall for this metric?") lines up with lokigi's own internal
+# ranking convention in SiteSolutionSet.plot_best_combination (documented as
+# "highest for coverage proportions, lowest for travel costs").
+RANK_METRIC_ASCENDING = {
+    "weighted_average": True,
+    "unweighted_average": True,
+    "90th_percentile": True,
+    "max": True,
+    "proportion_within_coverage_threshold": False,
+    "inter_tertile_ratio": True,
+}
+
+# Human-readable phrasing for each optimiser metric column, for embedding in
+# sentences (lower-case) or as st.radio options (via .capitalize()). Keeps
+# raw pandas column names like "proportion_within_coverage_threshold" off the
+# screen - they're meaningful to whoever wrote the analysis, not the exec
+# reading the page.
+RANK_METRIC_LABELS = {
+    "weighted_average": "weighted average travel time",
+    "unweighted_average": "unweighted average travel time",
+    "90th_percentile": "90th percentile travel time",
+    "max": "maximum travel time",
+    "proportion_within_coverage_threshold": "coverage within the travel time threshold",
+    "inter_tertile_ratio": "equity (inter-tertile ratio)",
+}
 
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
     "deprivation",
     "car_travel",
     "public_transport",
+    "2sfca_car",
+    "2sfca_pt",
     "utilisation",
+    "projected_demand",
+    "demand_deprivation_hotspots",
+    "demand_travel_hotspots",
+    "deprivation_travel_hotspots",
+    "final",
 ]
+
+# Human-readable phrasing for each SITE_SELECTION_SUBMITTABLE key, for
+# embedding in sentences (lower-case) describing which page a site choice
+# came from - e.g. "You chose X for travel by car" rather than the raw
+# "car_travel" key.
+SITE_SELECTION_LABELS = {
+    "demand": "demand",
+    "deprivation": "deprivation",
+    "car_travel": "travel by car",
+    "public_transport": "travel by public transport",
+    "2sfca_car": "accessibility by car (2SFCA)",
+    "2sfca_pt": "accessibility by public transport (2SFCA)",
+    "utilisation": "CDC utilisation",
+    "projected_demand": "projected demand",
+    "demand_deprivation_hotspots": "demand & deprivation hotspots",
+    "demand_travel_hotspots": "demand & travel hotspots",
+    "deprivation_travel_hotspots": "deprivation & travel hotspots",
+    "final": "your final decision",
+}
 
 
 # Load datasets
@@ -60,6 +121,22 @@ def load_devon_sites():
 
 
 @st.cache_data
+def load_cdc_utilisation():
+    # Made-up weekly capacity vs. weekly caseload for the four *existing* CDCs.
+    # These are illustrative teaching figures, not real activity data. Proposed
+    # (not-yet-built) sites are deliberately absent - they have no utilisation.
+    return pd.read_csv("data/devon_cdc_utilisation.csv")
+
+
+@st.cache_data
+def load_devon_sites_with_utilisation():
+    """Existing CDCs as a GeoDataFrame with weekly_capacity / weekly_caseload
+    columns merged in (proposed sites get NaN - they aren't built yet)."""
+    sites = load_devon_sites()
+    return sites.merge(load_cdc_utilisation(), on="Facility_Name", how="left")
+
+
+@st.cache_data
 def load_devon_geography():
     return geopandas.read_file("data/LSOA_Devon_2021_EW_BSC_V4.gpkg")
 
@@ -83,6 +160,38 @@ def create_demand_gdf():
 
 
 @st.cache_data
+def load_demand_projected():
+    return pd.read_csv("data/demand_MF_50_84_projected_2036.csv")
+
+
+@st.cache_data
+def create_projected_demand_gdf():
+    devon_gdf = load_devon_geography()
+    current_df = load_demand()
+    projected_df = load_demand_projected()
+
+    growth_df = current_df[["LSOA 2021 Name", "MF50-84", "Total"]].merge(
+        projected_df[["LSOA 2021 Name", "MF50-84", "Total"]],
+        on="LSOA 2021 Name",
+        suffixes=(" (Now)", " (2036)"),
+    )
+    growth_df["MF50-84 Growth"] = (
+        growth_df["MF50-84 (2036)"] - growth_df["MF50-84 (Now)"]
+    )
+    growth_df["MF50-84 Growth (%)"] = (
+        (growth_df["MF50-84 (2036)"] / growth_df["MF50-84 (Now)"] - 1) * 100
+    ).round(1)
+
+    full_gdf = devon_gdf.merge(
+        projected_df, left_on="LSOA21NM", right_on="LSOA 2021 Name"
+    ).merge(
+        growth_df[["LSOA 2021 Name", "MF50-84 Growth", "MF50-84 Growth (%)"]],
+        on="LSOA 2021 Name",
+    )
+    return full_gdf
+
+
+@st.cache_data
 def create_deprivation_gdf():
     devon_gdf = load_devon_geography()
     deprivation_df = load_deprivation()
@@ -90,6 +199,50 @@ def create_deprivation_gdf():
         deprivation_df, left_on="LSOA21NM", right_on="LSOA name (2021)"
     )
     return full_gdf
+
+
+@st.cache_data
+def load_demand_deprivation_hotspots():
+    # Precomputed offline by data/generate_hotspots.py so the page doesn't run
+    # Local Moran's I (spatial weights + permutation inference over 729 LSOAs)
+    # live on every session. Re-run that script if the demand/deprivation inputs
+    # change. Returns a GeoDataFrame with cluster_type / attribute_typology /
+    # combined_score / p_value columns keyed to the Devon LSOA geometry.
+    return pd.read_pickle("data/demand_deprivation_hotspots.pkl")
+
+
+@st.cache_data
+def load_demand_travel_hotspots():
+    # Precomputed offline by data/generate_demand_travel_hotspots.py (a
+    # solution-level analysis: it solves the existing-CDCs / car-travel problem
+    # first, then runs Local Moran's I on demand vs travel time). Re-run that
+    # script if the demand/car-travel inputs change. Returns a GeoDataFrame with
+    # cluster_type / attribute_typology / combined_score / p_value / min_cost
+    # columns keyed to the Devon LSOA geometry.
+    return pd.read_pickle("data/demand_travel_hotspots.pkl")
+
+
+@st.cache_data
+def load_deprivation_travel_hotspots():
+    # Precomputed offline by data/generate_deprivation_travel_hotspots.py (a
+    # solution-level analysis: it solves the existing-CDCs / car-travel problem
+    # first, then runs Local Moran's I on deprivation vs travel time). Re-run that
+    # script if the deprivation/car-travel inputs change. Returns a GeoDataFrame
+    # with cluster_type / attribute_typology / combined_score / p_value / min_cost
+    # columns keyed to the Devon LSOA geometry.
+    return pd.read_pickle("data/deprivation_travel_hotspots.pkl")
+
+
+def _sr_only_text(text: str) -> str:
+    """Plain-text fallback for the typewriter div: `<br>`s become line breaks,
+    any other markup is stripped, then the result is HTML-escaped for safe
+    embedding. Read immediately by screen readers/JS-disabled browsers, since
+    the animated div is aria-hidden and only reveals its text via `innerHTML`
+    once the char-by-char JS typing effect finishes.
+    """
+    collapsed = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    collapsed = re.sub(r"<[^>]+>", "", collapsed)
+    return html.escape(collapsed, quote=True)
 
 
 def write_terminal_html(
@@ -107,6 +260,7 @@ def write_terminal_html(
         js = f.read()
 
     safe_text = html.escape(text, quote=True)
+    sr_text = _sr_only_text(text)
     strong_pct = int(glow_amount * 100)
     soft_pct = int(glow_amount * 40)
 
@@ -123,7 +277,8 @@ def write_terminal_html(
 </style>
 </head>
 <body>
-  <div id="typewrite" class="typeing" data-text="{safe_text}"></div>
+  <div id="typewrite" class="typeing" aria-hidden="true" data-text="{safe_text}"></div>
+  <div class="sr-only" role="status">{sr_text}</div>
   <script>
     var REVEAL_SPEED_MS = {reveal_speed_ms};
     var CURSOR = {repr(cursor)};
@@ -256,19 +411,41 @@ def _already_visited(investigation: Investigation) -> bool:
     return investigation.id in visited_ids
 
 
+def _missing_prerequisites(investigation: Investigation) -> list[str]:
+    """IDs of this investigation's prerequisites not yet visited."""
+    visited_ids = {v["id"] for v in st.session_state.pages_visited}
+    return [p for p in investigation.prerequisites if p not in visited_ids]
+
+
 def investigation_button(investigation: Investigation) -> None:
     """
     Render a single investigation button.
 
-    - Hidden if prerequisites are unmet.
+    - Locked (visible but disabled, naming what's still needed) if
+      prerequisites are unmet - shows the curriculum exists rather than
+      hiding it entirely.
     - Greyed out (non-clickable) if already visited.
     - Active and clickable otherwise.
     """
+    button_key = f"inv_btn_{investigation.id}"
+
     if not _prerequisites_met(investigation):
-        return  # Hidden entirely
+        missing_titles = ", ".join(
+            ALL_INVESTIGATIONS[p].title
+            for p in _missing_prerequisites(investigation)
+            if p in ALL_INVESTIGATIONS
+        )
+        st.html(f"""
+            <div class="investigation-tile investigation-tile-locked">
+                <span style="margin-right: 8px; flex-shrink: 0;">&#128274;</span>
+                <span><strong>Locked</strong> - {investigation.analyst_prompt}<br>
+                    <span class="investigation-tile-requires">Requires: {missing_titles}</span>
+                </span>
+            </div>
+        """)
+        return
 
     visited = _already_visited(investigation)
-    button_key = f"inv_btn_{investigation.id}"
 
     # # Use Iconify API to grab the Lucide icon as a clean, static SVG image
     # # Lucide icons on Iconify use the prefix "lucide" (e.g., lucide/search)
@@ -285,19 +462,7 @@ def investigation_button(investigation: Investigation) -> None:
         icon_html = f'<img src="{icon_url}" style="width:18px; height:18px; vertical-align:middle; margin-right:8px; filter: opacity(0.4) grayscale(100%);" />'
         # Render as static greyed-out tile — no button interaction
         st.html(f"""
-            <div style="
-                display: flex;
-                align-items: center;
-                padding: 12px 16px;
-                border-radius: 8px;
-                border: 1.5px solid #e0e0e0;
-                background: #f7f7f7;
-                color: #aaa;
-                font-size: 0.92rem;
-                cursor: not-allowed;
-                margin-bottom: 6px;
-                user-select: none;
-            ">
+            <div class="investigation-tile investigation-tile-visited">
                 {icon_html}
                 <span>✓ {investigation.analyst_prompt}</span>
             </div>
@@ -305,11 +470,14 @@ def investigation_button(investigation: Investigation) -> None:
     else:
         streamlit_icon = f":material/{investigation.icon}:"
 
+        # Once the analyst's briefing budget is spent, every remaining choice is
+        # greyed out (disabled) - the only way forward is to make a decision.
         if st.button(
             investigation.analyst_prompt,
             key=button_key,
             icon=streamlit_icon,
-            use_container_width=True,
+            width="stretch",
+            disabled=capacity_exhausted(),
         ):
             record_page_visited(investigation)
             st.switch_page(investigation.page)
@@ -323,10 +491,20 @@ def render_navigation(current: Investigation) -> None:
     Render the full navigation section for a given investigation page.
     Call once at the bottom of each page after content.
     """
+    render_capacity_status()
+
     st.subheader("Recommended next steps")
-    for inv_id in current.recommended_next:
-        if inv_id in ALL_INVESTIGATIONS:
-            investigation_button(ALL_INVESTIGATIONS[inv_id])
+    st.caption("More options may unlock as you progress through the problem.")
+    recommended = [
+        ALL_INVESTIGATIONS[inv_id]
+        for inv_id in current.recommended_next
+        if inv_id in ALL_INVESTIGATIONS
+    ]
+    # Locked entries sink to the bottom of the list (stable sort keeps
+    # everything else in its existing order) - what you can act on right
+    # now stays primary, what's still locked reads as secondary/aspirational.
+    for inv in sorted(recommended, key=lambda inv: not _prerequisites_met(inv)):
+        investigation_button(inv)
 
     other_investigations = [
         inv
@@ -334,13 +512,12 @@ def render_navigation(current: Investigation) -> None:
         if inv_id not in set(current.recommended_next) | {current.id}
     ]
 
-    if any(
-        _prerequisites_met(inv) and not _already_visited(inv)
-        for inv in other_investigations
-    ):
+    if any(not _already_visited(inv) for inv in other_investigations):
         st.divider()
         st.subheader("Other available investigations")
-        for inv in other_investigations:
+        for inv in sorted(
+            other_investigations, key=lambda inv: not _prerequisites_met(inv)
+        ):
             investigation_button(inv)
 
     st.subheader("Other Actions")
@@ -349,7 +526,7 @@ def render_navigation(current: Investigation) -> None:
         "Review your decisions so far and make your choice.",
         key="btn_make_your_choice",
         icon=":material/balance:",
-        use_container_width=True,
+        width="stretch",
     ):
         st.switch_page("app/Decide.py")
 
@@ -430,7 +607,7 @@ def crt_filter_component(
 
 ANALYST_CAPACITY_MESSAGES = [
     {
-        "analyses_remaining": 5,
+        "analyses_remaining": 6,
         "message": (
             "Your analyst appears enthusiastic and optimistic. "
             "They have several coloured pens, a fresh notebook, and "
@@ -438,9 +615,14 @@ ANALYST_CAPACITY_MESSAGES = [
         ),
     },
     {
-        "analyses_remaining": 4,
-        "message": "Your analyst appears a little less bright-eyed and bushy-tailed than when you"
+        "analyses_remaining": 5,
+        "message": "Your analyst appears a little less bright-eyed and bushy-tailed than when you "
         "first met them. Their coffee cup does not leave their sight.",
+    },
+    {
+        "analyses_remaining": 4,
+        "message": "Your analyst now appears to have upgraded to a hat with two coffee cups atttached and a straw. "
+        "You make a note to review the coffee budget for the data department.",
     },
     {
         "analyses_remaining": 3,
@@ -451,7 +633,7 @@ ANALYST_CAPACITY_MESSAGES = [
     {
         "analyses_remaining": 2,
         "message": "Your analyst is mysteriously missing every time you try to talk to them. "
-        "You swear you saw them exit via a ground-floor bathroom window when you approached "
+        "You swear you saw them exit via a ground-floor window when you approached "
         "the building recently, but you cannot prove this.",
     },
     {
@@ -463,11 +645,179 @@ ANALYST_CAPACITY_MESSAGES = [
 ]
 
 
+def analyses_used() -> int:
+    """How many of the analyst's briefings have been spent so far.
+
+    Each unique evidence page the user visits costs one briefing (see
+    ``record_page_visited`` - revisits are free).
+    """
+    return len(st.session_state.pages_visited)
+
+
+def analyses_remaining() -> int:
+    """How many briefings the analyst can still provide."""
+    return MAXIMUM_BRIEFINGS - analyses_used()
+
+
+def total_analyst_days() -> float:
+    """Cumulative analyst_days across every unique page visited so far.
+
+    Purely informational - see render_capacity_status(). The briefing count
+    is the only thing that actually gates progress; this never constrains
+    anything, it just makes the (very uneven) real cost behind each flat
+    "1 briefing" visible.
+    """
+    return sum(v["analyst_days"] for v in st.session_state.pages_visited)
+
+
+def capacity_exhausted() -> bool:
+    """True once every briefing has been spent."""
+    return analyses_remaining() <= 0
+
+
+def _capacity_message(remaining: int) -> str | None:
+    """The analyst flavour text for a given number of remaining briefings."""
+    for entry in ANALYST_CAPACITY_MESSAGES:
+        if entry["analyses_remaining"] == remaining:
+            return entry["message"]
+    return None
+
+
+def render_capacity_status() -> None:
+    """Tell the user how many briefings they can still request.
+
+    Uses the flavour text in ``ANALYST_CAPACITY_MESSAGES`` and escalates the
+    styling (info -> warning -> error) as the budget runs down.
+    """
+    remaining = analyses_remaining()
+
+    if remaining <= 0:
+        st.error(
+            f"Your analyst is out of capacity - all {MAXIMUM_BRIEFINGS} briefings "
+            "have been used. You can no longer request new information, so it is "
+            "time to make your decision.",
+            icon=":material/hourglass_disabled:",
+        )
+    else:
+        plural = "briefing" if remaining == 1 else "briefings"
+        header = f"You can request **{remaining}** more {plural}."
+        message = _capacity_message(remaining)
+        body = f"{header}\n\n{message}" if message else header
+
+        if remaining <= 2:
+            st.warning(body, icon=":material/hourglass_bottom:")
+        else:
+            st.info(body, icon=":material/hourglass_top:")
+
+    if st.session_state.pages_visited:
+        days = total_analyst_days()
+        n = len(st.session_state.pages_visited)
+        briefing_word = "briefing" if n == 1 else "briefings"
+        st.caption(
+            f"Behind the scenes: your analyst has logged **{days:g} days** of work "
+            f"across those {n} {briefing_word} so far - a reminder that the "
+            "briefing count and the real cost aren't the same thing."
+        )
+
+
 def page_styling():
     with open("app/style.css", "r") as f:
         css_content = f.read()
 
     return st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+
+
+# A one-shot "scroll back to the top" used after a decision is submitted, so the
+# user lands at the top of the (now terminal-free) page instead of wherever the
+# submit button happened to be. request_scroll_to_top() is called at submission;
+# handle_scroll_to_top() runs once on the following rerun and consumes the flag.
+SCROLL_TOP_FLAG = "_scroll_to_top"
+
+
+def request_scroll_to_top():
+    """Ask for the next run to scroll the page to the top."""
+    st.session_state[SCROLL_TOP_FLAG] = True
+
+
+def handle_scroll_to_top():
+    """Emit the scroll-to-top JS if one was requested, then clear the flag."""
+    if not st.session_state.get(SCROLL_TOP_FLAG):
+        return
+    st.session_state[SCROLL_TOP_FLAG] = False
+
+    # A changing nonce makes Streamlit treat this as a fresh component each time,
+    # so the scroll re-fires on repeat submissions rather than being cached.
+    nonce = st.session_state.get("_scroll_nonce", 0) + 1
+    st.session_state["_scroll_nonce"] = nonce
+
+    # st.iframe (Streamlit >=1.60) auto-detects the HTML string and replaces the
+    # deprecated st.components.v1.html.
+    st.iframe(
+        f"""<!DOCTYPE html>
+<html><body><script>
+    // {nonce}
+    const doc = window.parent.document;
+    const selectors = [
+        'section.main',
+        '[data-testid="stMain"]',
+        '[data-testid="stAppViewContainer"]',
+        '[data-testid="stMainBlockContainer"]',
+    ];
+    for (const sel of selectors) {{
+        const el = doc.querySelector(sel);
+        if (el) el.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+    }}
+    window.parent.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+</script></body></html>""",
+        height=1,
+    )
+
+
+# Streamlit only honours `initial_sidebar_state` on a session's very first
+# page load - navigating between pages via st.switch_page/investigation tiles
+# reuses the same mounted app, so a newly-active page's own
+# initial_sidebar_state is silently ignored. This forces the sidebar open or
+# closed via JS instead, but only once per navigation to a given page (tracked
+# below) so it doesn't keep fighting a user who manually toggles it while
+# staying on that page.
+_SIDEBAR_FORCED_FOR_KEY = "_sidebar_forced_for_page"
+
+
+def force_sidebar_state(expanded: bool, page_key: str) -> None:
+    """Force the sidebar open/closed once per navigation to `page_key`."""
+    if st.session_state.get(_SIDEBAR_FORCED_FOR_KEY) == page_key:
+        return
+    st.session_state[_SIDEBAR_FORCED_FOR_KEY] = page_key
+
+    nonce = st.session_state.get("_sidebar_force_nonce", 0) + 1
+    st.session_state["_sidebar_force_nonce"] = nonce
+    desired = "true" if expanded else "false"
+
+    st.iframe(
+        f"""<!DOCTYPE html>
+<html><body><script>
+    // {nonce}
+    const doc = window.parent.document;
+    let attempts = 0;
+    const tryToggle = () => {{
+        attempts += 1;
+        const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sidebar) {{
+            if (attempts < 40) setTimeout(tryToggle, 100);
+            return;
+        }}
+        const isExpanded = sidebar.getAttribute("aria-expanded") === "true";
+        if (isExpanded === {desired}) return;
+        const btn = {desired}
+            ? doc.querySelector('[data-testid="stExpandSidebarButton"]')
+            : doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+        if (btn) btn.click();
+        else if (attempts < 40) setTimeout(tryToggle, 100);
+    }};
+    tryToggle();
+</script></body></html>""",
+        height=1,
+    )
 
 
 def select_site_from_current_evidence():
@@ -536,6 +886,37 @@ def setup_lokigi_site_problem_car_existing():
 
 
 @st.cache_resource
+def solve_car_existing_travel():
+    # D4 fix: the problem object was already cached, but Travel_Car.py called
+    # .solve(p=4) itself at page top-level, so it re-ran on every full rerun.
+    # p equals the number of existing sites here, so there's only one possible
+    # combination to evaluate - but solve() still walks the whole brute-force
+    # pipeline to find it, so caching the result (not just the problem) is what
+    # actually avoids the repeat work.
+    return setup_lokigi_site_problem_car_existing().solve(p=4)
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_utilisation():
+    # Utilisation is a baseline diagnostic of the *existing* sites: how much of
+    # each site's capacity today's caseload uses. It needs neither travel matrix
+    # nor solve() - just the sites registered with capacity/current-load columns.
+    lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
+
+    existing_sites = load_devon_sites_with_utilisation()
+    existing_sites = existing_sites[existing_sites["Existing"] == "Yes"]
+
+    lokigi_site_problem.add_sites(
+        existing_sites,
+        candidate_id_col="Facility_Name",
+        capacity_col="weekly_capacity",
+        current_load_col="weekly_caseload",
+    )
+
+    return lokigi_site_problem
+
+
+@st.cache_resource
 def setup_lokigi_site_problem_car():
     lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
 
@@ -569,13 +950,90 @@ def setup_lokigi_site_problem_pt():
     return lokigi_site_problem
 
 
-def render_notes_textbox(key):
+@st.cache_resource
+def solve_pt_travel():
+    # D4 fix, PT counterpart of solve_car_existing_travel() above - see that
+    # function's comment for why caching the solve() call (not just the
+    # problem setup) is what actually removes the per-rerun cost.
+    return setup_lokigi_site_problem_pt().solve(p=4)
+
+
+def _setup_lokigi_site_problem_2sfca(travel_matrix):
+    # 2SFCA needs the three ingredients the earlier pages showed separately:
+    # each existing site's capacity (supply), the population (demand, from BASE),
+    # and how far apart they are (a travel matrix). Only the four *existing* CDCs
+    # have capacity, so those are the sites we register. Proposed sites aren't
+    # built and contribute no supply; they're overlaid on the map for selection
+    # only, outside this lokigi problem.
+    lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
+
+    existing_sites = load_devon_sites_with_utilisation()
+    existing_sites = existing_sites[existing_sites["Existing"] == "Yes"]
+
+    lokigi_site_problem.add_sites(
+        existing_sites,
+        candidate_id_col="Facility_Name",
+        capacity_col="weekly_capacity",
+        current_load_col="weekly_caseload",
+    )
+
+    lokigi_site_problem.add_travel_matrix(
+        travel_matrix, unit="minutes", source_col="from_id"
+    )
+
+    return lokigi_site_problem
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_2sfca_car():
+    return _setup_lokigi_site_problem_2sfca(load_car_travel_matrix())
+
+
+@st.cache_resource
+def setup_lokigi_site_problem_2sfca_pt():
+    return _setup_lokigi_site_problem_2sfca(load_pt_travel_matrix())
+
+
+# A single, shared notepad follows the user across every evidence page. The
+# durable copy lives under a plain (non-widget) session-state key - Streamlit
+# clears widget-scoped state whenever a widget isn't rendered on the previous
+# run, which happens every time the user changes page, so the text area itself
+# cannot be relied on to persist. Instead the widget writes into the durable key
+# via its on_change callback, and is re-seeded from it on every run.
+NOTES_STATE_KEY = "user_notes"
+_NOTES_WIDGET_KEY = "_user_notes_widget"
+
+
+def _persist_notes():
+    st.session_state[NOTES_STATE_KEY] = st.session_state[_NOTES_WIDGET_KEY]
+
+
+def render_notes_textbox(key=None):
+    """Render the running notepad that follows the user from page to page.
+
+    All evidence pages share one notepad (``st.session_state["user_notes"]``),
+    so notes written on earlier pages are already present here.
+
+    ``key`` is accepted for backwards compatibility with existing call sites but
+    is no longer used to scope the notes - all pages share one notepad.
+    """
+    st.session_state.setdefault(NOTES_STATE_KEY, "")
+
     st.subheader("Write down any additional thoughts you have.")
-    st.caption("These will be saved to your notes.")
+    st.caption(
+        "These notes follow you from page to page, so you can build up your "
+        "thinking as you go."
+    )
+
+    # Re-seed the widget from the durable copy every run (see note above), then
+    # let its on_change callback write any edits straight back into it.
+    st.session_state[_NOTES_WIDGET_KEY] = st.session_state[NOTES_STATE_KEY]
     st.text_area(
         label="Your Thoughts",
         label_visibility="hidden",
-        key=f"additional_thoughts_{key}",
+        key=_NOTES_WIDGET_KEY,
+        on_change=_persist_notes,
+        height=350,
     )
 
     st.write("")

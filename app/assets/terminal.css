@@ -9,6 +9,20 @@ body {
   box-sizing: border-box;
 }
 
+/* Visually hidden but readable by screen readers - the accessible fallback
+   for the animated (aria-hidden) typewriter div above it. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .typeing {
   color: var(--terminal-colour);
   font-family: monospace;

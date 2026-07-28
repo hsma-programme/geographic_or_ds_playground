@@ -2,37 +2,60 @@ import streamlit as st
 from app.utils import (
     render_navigation,
     load_devon_geography,
-    setup_lokigi_site_problem_pt,
+    solve_pt_travel,
     page_styling,
+    TERMINAL_DEFAULT_SPEED,
+    write_terminal_html,
 )
 from app.utils_investigations import TRAVEL_PT
-from app.maps import render_travel_maps
+from app.maps import render_travel_maps, make_selection_map
+from functools import partial
 
 
-st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
 
 st.title("Travel Time - by Public Transport")
 
-problem = setup_lokigi_site_problem_pt()
-
-solution = problem.solve(p=4)
+solution = solve_pt_travel()
 
 best_solution_df = solution.return_best_combination_details()["problem_df"].iloc[0]
 
 region_geometry = load_devon_geography()
 
-st.write(best_solution_df)
-
 best_solution_gdf = region_geometry.merge(
     best_solution_df, left_on="LSOA21NM", right_on="LSOA 2021 Name"
 )
 
-render_travel_maps(best_solution_gdf)
+intro_text = f"""
+> The analyst returns with the same map as before, but this time the travel times are for public transport rather than the car.
+<br><br>
+> They tell you that you can swap between each LSOA - a small statistical area of around 1,500 people - showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
+<br><br>
+> "Same catch as last time," they add. "The colours only reflect the sites open today - the candidate pins are there for you to pick from, not to show what would happen if one were actually built."
+<br><br>
+> They warn you that the numbers can look rather different this time, and that public transport in rural Devon is not for the faint-hearted.
+<br><br>
+> They have now used the phrase "transport modelling is more complicated than people realise" on seventeen separate occasions. You have stopped counting out loud.
+"""
 
+# Once a decision has been made on this page, drop the analyst intro (and its
+# typing animation) so a revisit shows just the evidence and outcome.
+if not st.session_state.site_submitted_public_transport:
+    write_terminal_html(
+        intro_text,
+        output_path="app/assets/terminal_working/travel_public_transport.html",
+        reveal_speed_ms=TERMINAL_DEFAULT_SPEED,
+    )
 
-render_navigation(TRAVEL_PT)
+    st.iframe("app/assets/terminal_working/travel_public_transport.html")
 
+# Note the session key doesn't follow the name of the page as the automated rules
+# would make it display weirdly
+pt_travel_selection_map = make_selection_map(
+    partial(render_travel_maps, best_solution_gdf), "public_transport"
+)
+pt_travel_selection_map()
 
-# """Your analyst has now used the phrase "transport modelling is more complicated
-# than people realise" on seventeen separate occasions."
+if st.session_state.site_submitted_public_transport:
+    render_navigation(TRAVEL_PT)

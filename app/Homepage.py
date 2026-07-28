@@ -1,9 +1,9 @@
-import time
 import streamlit as st
 from app.utils import (
     write_terminal_html,
     investigation_button,
     MAXIMUM_BRIEFINGS,
+    render_capacity_status,
     write_crt_html,
     page_styling,
     TERMINAL_DEFAULT_SPEED,
@@ -13,6 +13,15 @@ from num2words import num2words
 
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
+
+# Unlike every other page, the sidebar's expand toggle stays hidden here while
+# collapsed - the homepage should read as a clean welcome screen, with no
+# invitation to open a sidebar that (before the user has started) has nothing
+# but an empty notepad in it.
+st.markdown(
+    "<style>[data-testid='stExpandSidebarButton'] { display: none }</style>",
+    unsafe_allow_html=True,
+)
 
 st.title("Welcome")
 
@@ -29,28 +38,22 @@ intro_text = f"""
 <br><br>
 > Due to capacity constraints, your analyst can provide you with a maximum of {num2words(MAXIMUM_BRIEFINGS)} briefings on areas of your choosing.
 <br><br>
+> Some of these will take your analyst an afternoon; others the better part of a fortnight. The briefing count does not know the difference - much like most budgets don't.
+<br><br>
 > The frazzled-looking data team lead has assured you it will be plenty.
 <br><br>
 > What is your first request to your data analyst?
 """
 
-if not st.session_state.homepage_visited:
-    reveal_speed = TERMINAL_DEFAULT_SPEED
+reveal_speed = TERMINAL_DEFAULT_SPEED if not st.session_state.homepage_visited else 0
 
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/homepage.html",
-        reveal_speed_ms=reveal_speed,
-    )
+write_terminal_html(
+    intro_text,
+    output_path="app/assets/terminal_working/homepage.html",
+    reveal_speed_ms=reveal_speed,
+)
 
-else:
-    reveal_speed = 0
-    char_count, reveal_speed = write_terminal_html(
-        intro_text,
-        output_path="app/assets/terminal_working/homepage.html",
-        reveal_speed_ms=reveal_speed,
-    )
-
+st.session_state.homepage_visited = True
 
 with cola:
     st.iframe("app/assets/terminal_working/homepage.html")
@@ -64,9 +67,7 @@ with colb:
     )
     st.iframe(generated_crt)
 
-if reveal_speed != 0:
-    typing_duration = (char_count * reveal_speed) / 1000
-    time.sleep(typing_duration)
+render_capacity_status()
 
 col1, col2, col3 = st.columns(3)
 

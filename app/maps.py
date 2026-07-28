@@ -1,18 +1,50 @@
 from app.utils import (
+    BASEMAP_TILES,
     create_demand_gdf,
     create_deprivation_gdf,
+    create_projected_demand_gdf,
+    load_devon_geography,
     load_devon_sites,
+    load_devon_sites_with_utilisation,
     load_population_weighted_centroids,
+    request_scroll_to_top,
+    setup_lokigi_site_problem_utilisation,
+    SITE_SELECTION_LABELS,
 )
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import pandas as pd
+from shapely import set_precision
 
 
 ###########################
 # MARK: Helpers
 ###########################
+# Every choropleth below embeds its GeoDataFrame straight into the map HTML as
+# GeoJSON (that's how gdf.explore()/folium work), and st_folium ships that whole
+# payload to the browser. Two things bloat it needlessly:
+#   * explore() writes each vertex at full float64 precision (~18 sig figs), far
+#     finer than the Devon-wide zoom can show, and
+#   * explore() embeds *every* column of the frame into each feature's
+#     properties, even the columns no tooltip ever displays.
+# _slim_for_map() strips both: it keeps only the columns actually drawn/tooltipped
+# and rounds coordinates to 5 dp (~1 m). This is display-only - all analysis is
+# keyed on LSOA name, not geometry, so no numeric result changes. Rounding is
+# topology-safe: grid-snapping is deterministic, so a vertex shared by two
+# neighbouring LSOAs snaps to the same point in both and their border stays
+# coincident (no slivers, unlike per-polygon simplification).
+def _slim_for_map(gdf, keep_cols):
+    """Return a display-only copy of ``gdf`` in EPSG:4326 with only ``keep_cols``
+    (plus geometry) retained and coordinates rounded to ~1 m, to shrink the map
+    HTML embedded by ``.explore()``. Order-preserving and duplicate-safe."""
+    geom_name = gdf.geometry.name
+    ordered = list(dict.fromkeys([c for c in keep_cols if c != geom_name]))
+    slim = gdf[[*ordered, geom_name]].to_crs("EPSG:4326").copy()
+    slim[geom_name] = set_precision(slim[geom_name].values, grid_size=1e-5)
+    return slim
+
+
 def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
     existing_sites = sites_gdf[sites_gdf["Existing"] == "Yes"]
     proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
@@ -58,7 +90,7 @@ def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
 
         centroids.add_to(m)
 
-    folium.LayerControl(collapsed=False).add_to(m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(m)
 
     return m
 
@@ -108,12 +140,14 @@ def render_deprivation_map():
     deprivation_gdf = create_deprivation_gdf()
     sites_gdf = load_devon_sites()
 
+    imd_col = "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
     # Create choropleth
-    m = deprivation_gdf.explore(
-        column="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+    m = _slim_for_map(deprivation_gdf, ["LSOA21NM", imd_col]).explore(
+        column=imd_col,
+        tiles=BASEMAP_TILES,
         tooltip=[
             "LSOA21NM",
-            "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+            imd_col,
         ],
         tooltip_kwds={
             "aliases": [
@@ -150,7 +184,7 @@ def render_deprivation_map():
     m = add_sites_to_map(m, sites_gdf=sites_gdf)
     m = add_site_legend(m)
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 ###########################
@@ -163,8 +197,8 @@ def render_demand_map():
     raw_options = ["MF50-84", "Total"]
 
     alias_dict = {
-        "MF50-84": "Per-LSOA Population - Between 50 and 84",
-        "Total": "Total Per-LSOA Population",
+        "MF50-84": "Population 50-84, by area",
+        "Total": "Total population, by area",
     }
 
     selected_age_range = st.radio(
@@ -174,8 +208,9 @@ def render_demand_map():
         index=0,
     )
     # Create choropleth
-    m = demand_gdf.explore(
+    m = _slim_for_map(demand_gdf, ["LSOA21NM", selected_age_range, "Total"]).explore(
         column=selected_age_range,
+        tiles=BASEMAP_TILES,
         tooltip=[
             "LSOA21NM",
             selected_age_range,
@@ -203,7 +238,499 @@ def render_demand_map():
             # Default is usually ~450px. Let's make it thinner/wider:
             child.width = 800
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
+
+
+###########################
+# MARK: Projected Demand
+###########################
+def render_projected_demand_map():
+    projected_gdf = create_projected_demand_gdf()
+    sites_gdf = load_devon_sites()
+
+    raw_options = ["MF50-84 Growth (%)", "MF50-84", "Total"]
+
+    alias_dict = {
+        "MF50-84 Growth (%)": "Projected Growth 2026-2036 (%)",
+        "MF50-84": "Projected population 50-84 in 2036, by area",
+        "Total": "Projected total population in 2036, by area",
+    }
+
+    selected_metric = st.radio(
+        "Select Metric to Visualise",
+        raw_options,
+        format_func=lambda x: alias_dict.get(x, x),
+        index=0,
+    )
+
+    other_column_aliases = {
+        "MF50-84": "Projected 50-84 Population (2036):",
+        "Total": "Projected Total Population (2036):",
+    }
+    tooltip_columns = ["LSOA21NM", selected_metric]
+    tooltip_aliases = ["Area:", f"{alias_dict.get(selected_metric, selected_metric)}:"]
+    for column, alias in other_column_aliases.items():
+        if column not in tooltip_columns:
+            tooltip_columns.append(column)
+            tooltip_aliases.append(alias)
+
+    # Create choropleth
+    m = _slim_for_map(projected_gdf, [selected_metric, *tooltip_columns]).explore(
+        column=selected_metric,
+        tiles=BASEMAP_TILES,
+        tooltip=tooltip_columns,
+        tooltip_kwds={
+            "aliases": tooltip_aliases,
+            "labels": True,
+            "sticky": False,
+        },
+        name="Projected Population",
+        zoom_start=9,
+        scheme="Percentiles",
+    )
+
+    # Add point layer
+    m = add_sites_to_map(m, sites_gdf=sites_gdf)
+    m = add_site_legend(m)
+    for child in m._children.values():
+        if child == "color_scale" or hasattr(child, "caption"):
+            # Default is usually ~450px. Let's make it thinner/wider:
+            child.width = 800
+
+    return st_folium(m, width="stretch")
+
+
+###########################
+# MARK: Utilisation
+###########################
+# Utilisation is a site-level metric (how full each existing CDC is today),
+# not a per-LSOA choropleth, so unlike the other maps this one draws no region
+# layer - just the sites on a plain basemap, mirroring lokigi's
+# plot_site_utilisation(). Existing CDCs are coloured/sized by utilisation
+# (blue = spare capacity, red = at/over capacity - a colourblind-safe RdYlBu_r
+# ramp rather than lokigi's own red/green convention, since a pure red-green
+# scale is unreadable under deuteranopia); proposed CDCs stay a distinct blue
+# marker colour so they remain clickable for the site selection at the bottom
+# of the page.
+_UTIL_COLOUR_MIN = 0.5  # <=50% used -> full blue
+_UTIL_COLOUR_MAX = 1.0  # >=100% used -> full red (over-capacity clips to red)
+
+
+def _utilisation_style(ratio):
+    """Return (hex colour, marker radius) for a utilisation ratio: low ratio =
+    blue + small, high (bad) ratio = red + large so over-capacity sites stand
+    out. Uses RdYlBu_r rather than a red/green ramp so the reading survives
+    red-green colour blindness."""
+    import matplotlib
+    from matplotlib.colors import Normalize, to_hex
+
+    norm = Normalize(vmin=_UTIL_COLOUR_MIN, vmax=_UTIL_COLOUR_MAX)
+    cmap = matplotlib.colormaps["RdYlBu_r"]
+    t = min(max(norm(ratio), 0.0), 1.0)  # clip into [0, 1]
+    colour = to_hex(cmap(t))
+    radius = 12 + t * 16  # 12px (blue) -> 28px (red)
+    return colour, radius
+
+
+def render_utilisation_map():
+    problem = setup_lokigi_site_problem_utilisation()
+    summary = problem.site_utilisation_summary().sort_values(
+        "utilisation_ratio", ascending=False
+    )
+
+    sites_gdf = load_devon_sites_with_utilisation()
+    existing_sites = sites_gdf[sites_gdf["Existing"] == "Yes"]
+    proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
+
+    # Centre roughly on Devon; fit to the sites afterwards.
+    m = folium.Map(location=[50.72, -3.8], zoom_start=8, tiles=BASEMAP_TILES)
+
+    existing_group = folium.FeatureGroup(name="Existing CDCs (utilisation)")
+    proposed_group = folium.FeatureGroup(name="Proposed CDCs")
+
+    for _, row in existing_sites.iterrows():
+        ratio = summary.loc[row["Facility_Name"], "utilisation_ratio"]
+        capacity = int(summary.loc[row["Facility_Name"], "capacity"])
+        caseload = int(summary.loc[row["Facility_Name"], "current_load"])
+        headroom = int(summary.loc[row["Facility_Name"], "headroom"])
+        colour, radius = _utilisation_style(ratio)
+
+        over = headroom < 0
+        headroom_line = (
+            f"<b style='color:#b2182b'>Over capacity by {abs(headroom)}/week</b>"
+            if over
+            else f"Spare capacity: {headroom}/week"
+        )
+        popup_html = (
+            f"<b>{row['Facility_Name']}</b><br>"
+            f"Weekly capacity: {capacity}<br>"
+            f"Weekly caseload: {caseload}<br>"
+            f"Utilisation: <b>{ratio * 100:.0f}%</b><br>"
+            f"{headroom_line}"
+        )
+
+        folium.CircleMarker(
+            location=[row.geometry.y, row.geometry.x],
+            radius=radius,
+            color="#333333",
+            weight=1,
+            fill=True,
+            fill_color=colour,
+            fill_opacity=0.85,
+            popup=folium.Popup(popup_html, max_width=260),
+            tooltip=f"{row['Facility_Name']}: {ratio * 100:.0f}% utilised",
+        ).add_to(existing_group)
+
+    for _, row in proposed_sites.iterrows():
+        folium.Marker(
+            location=[row.geometry.y, row.geometry.x],
+            popup=row["Facility_Name"],
+            tooltip=row["Facility_Name"],
+            icon=folium.Icon(icon="plus", prefix="fa", color="blue"),
+        ).add_to(proposed_group)
+
+    existing_group.add_to(m)
+    proposed_group.add_to(m)
+
+    # Frame the map on all sites.
+    # bounds = sites_gdf.total_bounds  # [minx, miny, maxx, maxy]
+    # m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+
+    m = _add_utilisation_legend(m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(m)
+
+    # Side-by-side: how full the centres are (left) vs. where the underlying
+    # regional demand sits (right), so the two can be read against each other.
+    col_util, col_demand = st.columns(2)
+
+    with col_util:
+        st.markdown("**How full is each existing CDC today?**")
+        # This is the selection map: its clickable proposed (blue) sites drive
+        # the site choice at the bottom of the page, so its result is returned.
+        result = st_folium(m, width="stretch", key="utilisation_map")
+
+    with col_demand:
+        st.markdown("**Where is the regional demand? (population aged 50-84)**")
+        demand_m = _build_regional_demand_map(zoom=8)
+        st_folium(demand_m, width="stretch", key="utilisation_demand_map")
+        st.caption(
+            "Darker areas have more people aged 50-84 - the group most likely to "
+            "need CDC services. The white markers are for reference only; make your "
+            "site choice on the left-hand map."
+        )
+
+    # View the numbers behind the utilisation map (site_utilisation_summary()).
+    display = summary.reset_index().rename(
+        columns={
+            "site": "CDC",
+            "capacity": "Weekly capacity",
+            "current_load": "Weekly caseload",
+            "utilisation_ratio": "Utilisation",
+            "headroom": "Spare capacity / week",
+        }
+    )
+    display["Utilisation"] = (display["Utilisation"] * 100).round(0).astype(int).astype(
+        str
+    ) + "%"
+    st.markdown("**Utilisation of each existing CDC**")
+    st.dataframe(display, hide_index=True, width="stretch")
+    st.caption(
+        "Utilisation = weekly caseload ÷ weekly capacity. "
+        "A value over 100% means the site is running beyond its planned capacity."
+    )
+
+    return result
+
+
+def _build_regional_demand_map(zoom=9):
+    """Compact demand choropleth (population aged 50-84 per LSOA) with the
+    existing/proposed CDCs overlaid, for the utilisation page's second column.
+    Mirrors render_demand_map() but with no age-range toggle and returns the
+    folium map instead of calling st_folium (the caller renders it)."""
+    demand_gdf = create_demand_gdf()
+
+    demand_m = _slim_for_map(demand_gdf, ["LSOA21NM", "MF50-84", "Total"]).explore(
+        column="MF50-84",
+        tiles=BASEMAP_TILES,
+        tooltip=["LSOA21NM", "MF50-84", "Total"],
+        tooltip_kwds={
+            "aliases": [
+                "Area:",
+                "Population 50-84:",
+                "Total population:",
+            ],
+            "labels": True,
+            "sticky": False,
+        },
+        name="Population 50-84",
+        zoom_start=zoom,
+        scheme="Percentiles",
+    )
+
+    # Sites here are context only - existing CDCs white, proposed CDCs grey (both
+    # deliberately clear of the blue->red utilisation ramp on the left map) so it
+    # reads as "you can't pick here". Site selection happens on the left map.
+    sites_gdf = load_devon_sites()
+    reference_group = folium.FeatureGroup(name="CDCs (reference only)")
+    for _, row in sites_gdf.iterrows():
+        existing = row["Existing"] == "Yes"
+        folium.Marker(
+            location=[row.geometry.y, row.geometry.x],
+            popup=row["Facility_Name"],
+            tooltip=f"{row['Facility_Name']} — choose your site on the left-hand map",
+            # Dark glyph so the white (existing) pin stays legible over the choropleth.
+            icon=folium.Icon(
+                icon="plus",
+                prefix="fa",
+                color="white" if existing else "gray",
+                icon_color="#333333",
+            ),
+        ).add_to(reference_group)
+    reference_group.add_to(demand_m)
+
+    demand_m = _add_reference_site_legend(demand_m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(demand_m)
+
+    return demand_m
+
+
+def _add_reference_site_legend(m):
+    legend_html = """
+    <div class="ref-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 200px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>CDC sites</b><br>
+    <span style="display:inline-block;width:12px;height:12px;background:white;
+    border:1px solid #777;vertical-align:middle;"></span> Existing CDC<br>
+    <span style="display:inline-block;width:12px;height:12px;background:gray;
+    border:1px solid #777;vertical-align:middle;"></span> Proposed CDC<br>
+    <span style="font-size:11px;color:#555;">Shown for reference only —
+    choose your site on the left-hand map.</span>
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .ref-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
+
+
+def _add_utilisation_legend(m):
+    legend_html = """
+    <div class="util-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 210px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>CDC Utilisation</b><br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#313695;border:1px solid #333;"></span>
+    Spare capacity (&le;50%)<br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#fffebe;border:1px solid #333;"></span>
+    Getting busy (~75%)<br>
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+        background:#a50026;border:1px solid #333;"></span>
+    At / over capacity (&ge;100%)<br>
+    <span style="margin-top:4px;display:inline-block;"></span>
+    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
+    <br><span style="font-size:11px;color:#555;">Larger circle = busier site</span>
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .util-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
+
+
+###########################
+# MARK: 2SFCA (Accessibility)
+###########################
+# The two-step floating catchment area (2SFCA) score answers a question the
+# earlier pages could only answer in pieces: "how much CDC capacity is realistically
+# available to the people who live here?" It combines three things at once - how
+# much capacity each site has, how many people compete for that capacity, and how
+# far away it is. The pay-off for the teaching narrative is that two areas with an
+# identical travel time to their nearest CDC can still score very differently if one
+# of them shares that CDC with far more people.
+_ACCESS_SCALE = 1000  # express accessibility as weekly slots per 1,000 residents
+
+
+def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
+    """Render the 2SFCA accessibility choropleth for one travel mode.
+
+    `problem` is a lokigi SiteProblem with the existing CDCs (capacity) and the
+    relevant travel matrix already loaded. `mode_key` ("car"/"pt") only namespaces
+    the widget keys. Returns the st_folium result so the proposed (blue) markers can
+    still drive the site selection at the bottom of the page.
+    """
+    catchment_size = st.radio(
+        "How far are people assumed to be willing to travel to reach a CDC?",
+        catchment_options,
+        format_func=lambda m: f"Within {m} minutes",
+        index=catchment_options.index(default_catchment),
+        horizontal=True,
+        key=f"2sfca_catchment_{mode_key}",
+    )
+
+    # Step 1 (site ratios) + step 2 (per-area accessibility) in one call.
+    region_df, site_df = problem.two_step_floating_catchment(
+        supply_col="weekly_capacity",
+        catchment_size=catchment_size,
+        return_site_ratios=True,
+    )
+
+    # Raw accessibility is supply-per-person-per-week (tiny numbers); scale to
+    # "weekly slots per 1,000 residents" so the legend and tooltips read sensibly.
+    region_df = region_df.copy()
+    region_df["access_scaled"] = region_df["accessibility"] * _ACCESS_SCALE
+
+    gdf = load_devon_geography().merge(
+        region_df.reset_index(), left_on="LSOA21NM", right_on="LSOA 2021 Name"
+    )
+
+    # Blue = well-served, red = underserved (deepest red = no CDC within the
+    # limit), so the areas that most need a new site jump out. RdYlBu rather
+    # than lokigi's own RdYlGn convention: a pure red-green ramp is unreadable
+    # under deuteranopia, and NHS public-sector tools are expected to clear
+    # WCAG 2.1 AA colour-contrast/colour-blindness guidance.
+    m = _slim_for_map(
+        gdf, ["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"]
+    ).explore(
+        column="access_scaled",
+        tiles=BASEMAP_TILES,
+        cmap="RdYlBu",
+        tooltip=["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"],
+        tooltip_kwds={
+            "aliases": [
+                "Area:",
+                "Weekly slots per 1,000 residents:",
+                "CDCs reachable within limit:",
+                "Population 50-84:",
+            ],
+            "labels": True,
+            "sticky": False,
+        },
+        name="Accessibility (2SFCA)",
+        zoom_start=9,
+        scheme="Percentiles",
+        # Default explore legend shows raw percentile-bin numbers; we replace it
+        # with a semantic gradient legend below (blue = well served, red = not).
+        legend=False,
+    )
+
+    m = add_sites_to_map(m, sites_gdf=load_devon_sites())
+    m = _add_2sfca_legend(m)
+
+    result = st_folium(m, width="stretch", key=f"2sfca_{mode_key}_map")
+
+    st.caption(
+        "Bluer areas have more CDC capacity available per resident once travel time "
+        "*and* competition from other patients are taken into account. Red areas are "
+        "the most underserved; the deepest red areas have no existing CDC within the "
+        "travel limit selected above at all."
+    )
+
+    # Site-level view: step 1 of the calculation - how stretched is each existing
+    # CDC once you count everyone who can reach it?
+    display = site_df.reset_index().rename(
+        columns={
+            "Facility_Name": "CDC",
+            "supply": "Weekly capacity",
+            "catchment_demand": "People 50-84 within reach",
+            "n_regions_in_catchment": "Areas within reach",
+        }
+    )
+    display["Slots per 1,000 people within reach"] = (
+        display["ratio"] * _ACCESS_SCALE
+    ).round(1)
+    display = display.drop(columns=["ratio"])
+    display["Weekly capacity"] = display["Weekly capacity"].round(0).astype(int)
+    display["People 50-84 within reach"] = (
+        display["People 50-84 within reach"].round(0).astype(int)
+    )
+    st.markdown("**How stretched is each existing CDC?**")
+    st.dataframe(display, hide_index=True, width="stretch")
+    st.caption(
+        "A CDC with plenty of capacity can still offer each person only a few slots if "
+        "a large population can reach it - so the areas that depend on it score poorly "
+        "for accessibility, even when the CDC is physically close by."
+    )
+
+    return result
+
+
+def _add_2sfca_legend(m):
+    # A semantic legend for the choropleth: rather than the raw percentile-bin
+    # numbers explore would print, show the red->blue ramp with what it means,
+    # plus the CDC site markers, in a single box. RdYlBu stops (colourblind-safe
+    # alternative to lokigi's own red/green convention - see render_2sfca_map).
+    legend_html = """
+    <div class="sfca-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 235px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <b>How well-served is each area?</b><br>
+    <span style="font-size:11px;color:#555;">Weekly CDC capacity within reach,
+    per resident (2SFCA)</span>
+    <div style="height:12px;margin:6px 0 2px 0;border:1px solid #333;
+        background:linear-gradient(to right,#a50026,#ffffbf,#313695);"></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span>Underserved</span><span>Well served</span>
+    </div>
+    <span style="font-size:11px;color:#555;">Darkest red areas cannot reach any
+    CDC within the travel limit.</span>
+    <hr style="margin:8px 0;border:none;border-top:1px solid #ddd;">
+    <b>CDC sites</b><br>
+    <i class="fa fa-plus" style="color:red"></i> Existing CDC<br>
+    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .sfca-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
 
 
 ###########################
@@ -223,7 +750,7 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
     elif what == "centre":
         column = "selected_site"
         name = "Nearest Site"
-        legend_kwds = {"caption": "Nearest Site to LSOA"}
+        legend_kwds = {"caption": "Nearest Site to Area"}
         cmap = None
     if what == "threshold":
         if threshold is None:
@@ -250,8 +777,12 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
 
             cmap = ListedColormap(["#67a9cf", "#ef8a62"])
 
-    m = best_solution_gdf.round(1).explore(
+    m = _slim_for_map(
+        best_solution_gdf.round(1),
+        [column, "LSOA21NM", "min_cost", "selected_site"],
+    ).explore(
         column=column,
+        tiles=BASEMAP_TILES,
         tooltip=["LSOA21NM", "min_cost", "selected_site"],
         tooltip_kwds={
             "aliases": [
@@ -298,7 +829,7 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
             # Default is usually ~450px. Let's make it thinner/wider:
             child.width = 800
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 def render_travel_maps(best_solution_gdf):
@@ -328,6 +859,214 @@ def render_travel_maps(best_solution_gdf):
         )
 
 
+###########################
+# MARK: Hotspots (shared)
+###########################
+# lokigi's own get_hotspots() classifications, coloured by convention. Each pair
+# of variables is combined offline (data/generate_*hotspots.py) into a single
+# GeoDataFrame; here we just draw it, mirroring the other .explore()-based maps
+# so it renders reliably in st_folium. The priority typology and the statistical
+# clusters are two views of the same precomputed data, shared across every
+# hotspot page.
+# n_bins=3 splits each axis into Low/Medium/High (or Good/Medium/Poor) thirds
+# rather than n_bins=2's median split. With a median split, "High" only means
+# "above the Devon median", so 3 of the 4 quadrants (everything except
+# Low/Low) read as an "attention" colour - roughly 75% of LSOAs, even though
+# most of that is only mildly off on a single axis. Colouring the 3x3 grid by
+# *combined* severity (each axis scored Low/Good=0, Medium=1, High/Poor=2,
+# summed to 0-4) fixes that: only the single most extreme corner (score 4)
+# reads red, the two cells adjacent to it (score 3) read amber/yellow, and
+# the three cells where the axes disagree or both sit in the middle (score 2)
+# read as neutral grey - so the map's use of "red" tracks genuine severity
+# rather than "above average on one thing". The two score-3 colours are kept
+# distinct (rather than collapsed, as lokigi's own severity scoring does) so
+# a "worth watching" area still shows *which* axis is driving it, matching
+# this app's existing convention from the 2x2 typology.
+_TYPOLOGY_SEVERITY = {"Low": 0, "Medium": 1, "High": 2, "Good": 0, "Poor": 2}
+_TYPOLOGY_PRIORITY = "#d7191c"  # score 4 - the single worst corner
+_TYPOLOGY_LEADING_A = "#dd7b26"  # score 3, driven by the first axis
+_TYPOLOGY_LEADING_B = "#ffdf8d"  # score 3, driven by the second axis
+_TYPOLOGY_BALANCED = "#7e7e7e"  # score 2 - medium/medium, or the axes cancel out
+_TYPOLOGY_LEANING_GOOD = "#a6bddb"  # score 1
+_TYPOLOGY_DOING_WELL = "#2c7bb6"  # score 0 - the single best corner
+
+
+def _typology_colour_map(axis_a_levels, axis_a_name, axis_b_levels, axis_b_name):
+    """Build an ordered {label: colour} dict, worst to best, for every
+    combination of a 3-level axis_a (e.g. Low/Medium/High Demand) and axis_b
+    (e.g. Good/Medium/Poor Access), coloured by combined severity score. The
+    label format (f"{a} {axis_a_name} / {b} {axis_b_name}") matches lokigi's
+    own attribute_typology string exactly."""
+
+    def colour(a, b, score):
+        if score == 4:
+            return _TYPOLOGY_PRIORITY
+        if score == 3:
+            leading_a = _TYPOLOGY_SEVERITY[a] > _TYPOLOGY_SEVERITY[b]
+            return _TYPOLOGY_LEADING_A if leading_a else _TYPOLOGY_LEADING_B
+        if score == 2:
+            return _TYPOLOGY_BALANCED
+        if score == 1:
+            return _TYPOLOGY_LEANING_GOOD
+        return _TYPOLOGY_DOING_WELL
+
+    cells = [
+        (f"{a} {axis_a_name} / {b} {axis_b_name}", _TYPOLOGY_SEVERITY[a], a, b)
+        for a in axis_a_levels
+        for b in axis_b_levels
+    ]
+    # Worst -> best, then (for score-3 ties) the axis_a-led cell before the
+    # axis_b-led one, so the legend lists red, amber, yellow, ... in order.
+    cells.sort(key=lambda c: (-(c[1] + _TYPOLOGY_SEVERITY[c[3]]), -c[1]))
+
+    return {
+        label: colour(a, b, sev_a + _TYPOLOGY_SEVERITY[b])
+        for label, sev_a, a, b in cells
+    }
+
+
+_TERCILE_LEVELS = ["Low", "Medium", "High"]
+_ACCESS_LEVELS = ["Good", "Medium", "Poor"]
+
+_DEMAND_DEPRIVATION_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Demand", _TERCILE_LEVELS, "Deprivation"
+)
+
+_DEMAND_TRAVEL_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Demand", _ACCESS_LEVELS, "Access"
+)
+
+_DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS = _typology_colour_map(
+    _TERCILE_LEVELS, "Deprivation", _ACCESS_LEVELS, "Access"
+)
+
+_CLUSTER_COLOURS = {
+    "Hotspot": "#d7191c",  # high-high
+    "High-Low Outlier": "#fee08b",
+    "Low-High Outlier": "#abd9e9",
+    "Coldspot": "#2c7bb6",  # low-low
+    "Not Significant": "#bdbdbd",
+}
+
+
+def _render_hotspots_map(
+    hotspots_gdf, what, typology_colours, typology_alias, typology_caption
+):
+    from matplotlib.colors import ListedColormap
+
+    sites_gdf = load_devon_sites()
+
+    if what == "typology":
+        colour_map = typology_colours
+        column = "attribute_typology"
+        tooltip = ["LSOA21NM", "attribute_typology", "combined_score"]
+        aliases = ["Area:", typology_alias, "Combined priority score:"]
+        caption = typology_caption
+    else:  # "clusters"
+        colour_map = _CLUSTER_COLOURS
+        column = "cluster_type"
+        tooltip = ["LSOA21NM", "cluster_type", "p_value"]
+        aliases = ["Area:", "Cluster type:", "p-value:"]
+        caption = "Local Moran's I cluster"
+
+    # .copy() because hotspots_gdf is a cached object reused across fragment reruns.
+    gdf = hotspots_gdf.copy()
+
+    # Keep only categories actually present, in the fixed order above, so the
+    # ListedColormap lines up with the categorical values.
+    present = [c for c in colour_map if c in set(gdf[column].dropna().unique())]
+    gdf[column] = pd.Categorical(gdf[column], categories=present, ordered=True)
+    cmap = ListedColormap([colour_map[c] for c in present])
+
+    m = _slim_for_map(gdf.round(3), [column, *tooltip]).explore(
+        column=column,
+        tiles=BASEMAP_TILES,
+        categorical=True,
+        cmap=cmap,
+        tooltip=tooltip,
+        tooltip_kwds={
+            "aliases": aliases,
+            "labels": True,
+            "sticky": False,
+        },
+        name="Hotspots",
+        zoom_start=9,
+        legend_kwds={"caption": caption},
+    )
+
+    # Workaround for legend colours (same as the deprivation map)
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .legend-labels {
+            color: black !important;
+        }
+
+        .legend-title {
+            color: black !important;
+        }
+        </style>
+        """)
+    )
+
+    m = add_sites_to_map(m, sites_gdf=sites_gdf)
+    m = add_site_legend(m)
+
+    return st_folium(m, width="stretch")
+
+
+def _hotspots_view(typology_label):
+    """Shared radio toggle between the priority typology and the statistical
+    clusters. Returns "typology" or "clusters"."""
+    map_selection = st.radio(
+        "Select map type",
+        [typology_label, "Statistical hotspots (Local Moran's I)"],
+    )
+    return "typology" if map_selection == typology_label else "clusters"
+
+
+###########################
+# MARK: Demand & Deprivation Hotspots
+###########################
+def render_demand_deprivation_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (demand × deprivation)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEMAND_DEPRIVATION_TYPOLOGY_COLOURS,
+        typology_alias="Demand / Deprivation:",
+        typology_caption="Demand × Deprivation priority",
+    )
+
+
+###########################
+# MARK: Demand & Travel Hotspots
+###########################
+def render_demand_travel_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (demand × access)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEMAND_TRAVEL_TYPOLOGY_COLOURS,
+        typology_alias="Demand / Access:",
+        typology_caption="Demand × Access priority",
+    )
+
+
+###########################
+# MARK: Deprivation & Travel Hotspots
+###########################
+def render_deprivation_travel_hotspots_maps(hotspots_gdf):
+    what = _hotspots_view("Priority typology (deprivation × access)")
+    return _render_hotspots_map(
+        hotspots_gdf,
+        what,
+        _DEPRIVATION_TRAVEL_TYPOLOGY_COLOURS,
+        typology_alias="Deprivation / Access:",
+        typology_caption="Deprivation × Access priority",
+    )
+
+
 ###############################
 # MARK: Site selection wrapper
 ###############################
@@ -336,10 +1075,11 @@ def make_selection_map(map_render_fn, key_suffix):
     def selection_map():
         confirmed_key = f"confirmed_site_{key_suffix}"
         submitted_key = f"site_submitted_{key_suffix}"
+        label = SITE_SELECTION_LABELS.get(key_suffix, key_suffix)
 
         if st.session_state[submitted_key]:
             st.info(
-                f"You have submitted a site recommendation based on {key_suffix} "
+                f"You have submitted a site recommendation based on {label} "
                 f"({st.session_state[confirmed_key]['Site']})."
                 "\n\nPlease use the buttons below to request your next analysis."
             )
@@ -347,6 +1087,10 @@ def make_selection_map(map_render_fn, key_suffix):
 
         st_data = map_render_fn()
 
+        st.caption(
+            "You won't see the whole picture from one page. Commit to your best "
+            "call now; you'll find out later how it holds up as the evidence builds."
+        )
         st.write("From just the evidence on this page, which site would you choose?")
 
         all_sites = load_devon_sites()
@@ -370,7 +1114,7 @@ def make_selection_map(map_render_fn, key_suffix):
         else:
             st.success(f"Selected Site = {selected_site}")
             st.session_state[confirmed_key] = {
-                "What": key_suffix.capitalize(),
+                "What": label,
                 "Site": selected_site,
             }
 
@@ -391,6 +1135,7 @@ def make_selection_map(map_render_fn, key_suffix):
 
         if button:
             st.session_state[submitted_key] = True
+            request_scroll_to_top()
             st.rerun()
 
     return selection_map
