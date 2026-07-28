@@ -14,6 +14,11 @@ TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
 MAXIMUM_BRIEFINGS = 6
 
+# Shared basemap for every folium/leaflet map in the app, so switching styles
+# only requires changing this one value. CartoDB Voyager keeps roads/labels
+# visible (unlike Positron) while staying more muted than default OpenStreetMap.
+BASEMAP_TILES = "cartodbvoyager"
+
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
     "deprivation",
@@ -398,7 +403,7 @@ def investigation_button(investigation: Investigation) -> None:
             investigation.analyst_prompt,
             key=button_key,
             icon=streamlit_icon,
-            use_container_width=True,
+            width="stretch",
             disabled=capacity_exhausted(),
         ):
             record_page_visited(investigation)
@@ -416,6 +421,7 @@ def render_navigation(current: Investigation) -> None:
     render_capacity_status()
 
     st.subheader("Recommended next steps")
+    st.caption("More options may unlock as you progress through the problem.")
     for inv_id in current.recommended_next:
         if inv_id in ALL_INVESTIGATIONS:
             investigation_button(ALL_INVESTIGATIONS[inv_id])
@@ -441,7 +447,7 @@ def render_navigation(current: Investigation) -> None:
         "Review your decisions so far and make your choice.",
         key="btn_make_your_choice",
         icon=":material/balance:",
-        use_container_width=True,
+        width="stretch",
     ):
         st.switch_page("app/Decide.py")
 

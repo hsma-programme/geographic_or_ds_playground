@@ -1,4 +1,5 @@
 from app.utils import (
+    BASEMAP_TILES,
     create_demand_gdf,
     create_deprivation_gdf,
     create_projected_demand_gdf,
@@ -88,7 +89,7 @@ def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
 
         centroids.add_to(m)
 
-    folium.LayerControl(collapsed=False).add_to(m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(m)
 
     return m
 
@@ -142,6 +143,7 @@ def render_deprivation_map():
     # Create choropleth
     m = _slim_for_map(deprivation_gdf, ["LSOA21NM", imd_col]).explore(
         column=imd_col,
+        tiles=BASEMAP_TILES,
         tooltip=[
             "LSOA21NM",
             imd_col,
@@ -181,7 +183,7 @@ def render_deprivation_map():
     m = add_sites_to_map(m, sites_gdf=sites_gdf)
     m = add_site_legend(m)
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 ###########################
@@ -207,6 +209,7 @@ def render_demand_map():
     # Create choropleth
     m = _slim_for_map(demand_gdf, ["LSOA21NM", selected_age_range, "Total"]).explore(
         column=selected_age_range,
+        tiles=BASEMAP_TILES,
         tooltip=[
             "LSOA21NM",
             selected_age_range,
@@ -234,7 +237,7 @@ def render_demand_map():
             # Default is usually ~450px. Let's make it thinner/wider:
             child.width = 800
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 ###########################
@@ -273,6 +276,7 @@ def render_projected_demand_map():
     # Create choropleth
     m = _slim_for_map(projected_gdf, [selected_metric, *tooltip_columns]).explore(
         column=selected_metric,
+        tiles=BASEMAP_TILES,
         tooltip=tooltip_columns,
         tooltip_kwds={
             "aliases": tooltip_aliases,
@@ -292,7 +296,7 @@ def render_projected_demand_map():
             # Default is usually ~450px. Let's make it thinner/wider:
             child.width = 800
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 ###########################
@@ -335,7 +339,7 @@ def render_utilisation_map():
     proposed_sites = sites_gdf[sites_gdf["Existing"] == "No"]
 
     # Centre roughly on Devon; fit to the sites afterwards.
-    m = folium.Map(location=[50.72, -3.8], zoom_start=8, tiles="cartodbpositron")
+    m = folium.Map(location=[50.72, -3.8], zoom_start=8, tiles=BASEMAP_TILES)
 
     existing_group = folium.FeatureGroup(name="Existing CDCs (utilisation)")
     proposed_group = folium.FeatureGroup(name="Proposed CDCs")
@@ -389,7 +393,7 @@ def render_utilisation_map():
     # m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
     m = _add_utilisation_legend(m)
-    folium.LayerControl(collapsed=False).add_to(m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(m)
 
     # Side-by-side: how full the centres are (left) vs. where the underlying
     # regional demand sits (right), so the two can be read against each other.
@@ -399,12 +403,12 @@ def render_utilisation_map():
         st.markdown("**How full is each existing CDC today?**")
         # This is the selection map: its clickable proposed (blue) sites drive
         # the site choice at the bottom of the page, so its result is returned.
-        result = st_folium(m, use_container_width=True, key="utilisation_map")
+        result = st_folium(m, width="stretch", key="utilisation_map")
 
     with col_demand:
         st.markdown("**Where is the regional demand? (population aged 50-84)**")
         demand_m = _build_regional_demand_map(zoom=8)
-        st_folium(demand_m, use_container_width=True, key="utilisation_demand_map")
+        st_folium(demand_m, width="stretch", key="utilisation_demand_map")
         st.caption(
             "Darker areas have more people aged 50-84 - the group most likely to "
             "need CDC services. The white markers are for reference only; make your "
@@ -425,9 +429,9 @@ def render_utilisation_map():
         str
     ) + "%"
     st.markdown("**Utilisation of each existing CDC**")
-    st.dataframe(display, hide_index=True, use_container_width=True)
+    st.dataframe(display, hide_index=True, width="stretch")
     st.caption(
-        "Utilisation = weekly caseload ÷ weekly capacity."
+        "Utilisation = weekly caseload ÷ weekly capacity. "
         "A value over 100% means the site is running beyond its planned capacity."
     )
 
@@ -443,6 +447,7 @@ def _build_regional_demand_map(zoom=9):
 
     demand_m = _slim_for_map(demand_gdf, ["LSOA21NM", "MF50-84", "Total"]).explore(
         column="MF50-84",
+        tiles=BASEMAP_TILES,
         tooltip=["LSOA21NM", "MF50-84", "Total"],
         tooltip_kwds={
             "aliases": [
@@ -480,7 +485,7 @@ def _build_regional_demand_map(zoom=9):
     reference_group.add_to(demand_m)
 
     demand_m = _add_reference_site_legend(demand_m)
-    folium.LayerControl(collapsed=False).add_to(demand_m)
+    folium.LayerControl(collapsed=False, hideSingleBase=True).add_to(demand_m)
 
     return demand_m
 
@@ -613,6 +618,7 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
         gdf, ["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"]
     ).explore(
         column="access_scaled",
+        tiles=BASEMAP_TILES,
         cmap="RdYlGn",
         tooltip=["LSOA21NM", "access_scaled", "n_sites_in_catchment", "demand"],
         tooltip_kwds={
@@ -636,7 +642,7 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
     m = add_sites_to_map(m, sites_gdf=load_devon_sites())
     m = _add_2sfca_legend(m)
 
-    result = st_folium(m, use_container_width=True, key=f"2sfca_{mode_key}_map")
+    result = st_folium(m, width="stretch", key=f"2sfca_{mode_key}_map")
 
     st.caption(
         "Greener areas have more CDC capacity available per resident once travel time "
@@ -664,7 +670,7 @@ def render_2sfca_map(problem, mode_key, catchment_options, default_catchment):
         display["People 50-84 within reach"].round(0).astype(int)
     )
     st.markdown("**How stretched is each existing CDC?**")
-    st.dataframe(display, hide_index=True, use_container_width=True)
+    st.dataframe(display, hide_index=True, width="stretch")
     st.caption(
         "A CDC with plenty of capacity can still offer each person only a few slots if "
         "a large population can reach it - so the areas that depend on it score poorly "
@@ -768,6 +774,7 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
         [column, "LSOA21NM", "min_cost", "selected_site"],
     ).explore(
         column=column,
+        tiles=BASEMAP_TILES,
         tooltip=["LSOA21NM", "min_cost", "selected_site"],
         tooltip_kwds={
             "aliases": [
@@ -814,7 +821,7 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
             # Default is usually ~450px. Let's make it thinner/wider:
             child.width = 800
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 def render_travel_maps(best_solution_gdf):
@@ -914,6 +921,7 @@ def _render_hotspots_map(
 
     m = _slim_for_map(gdf.round(3), [column, *tooltip]).explore(
         column=column,
+        tiles=BASEMAP_TILES,
         categorical=True,
         cmap=cmap,
         tooltip=tooltip,
@@ -945,7 +953,7 @@ def _render_hotspots_map(
     m = add_sites_to_map(m, sites_gdf=sites_gdf)
     m = add_site_legend(m)
 
-    return st_folium(m, use_container_width=True)
+    return st_folium(m, width="stretch")
 
 
 def _hotspots_view(typology_label):
