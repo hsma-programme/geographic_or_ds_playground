@@ -4,6 +4,7 @@ from app.utils import (
     render_navigation,
     page_styling,
     TERMINAL_DEFAULT_SPEED,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import DEPRIVATION
 from app.maps import render_deprivation_map, make_selection_map
@@ -39,6 +40,7 @@ if not st.session_state.site_submitted_deprivation:
     st.session_state.deprivation_page_visited = True
 
     st.iframe("app/assets/terminal_working/deprivation_page.html")
+    render_prior_choice_recap(DEPRIVATION)
 
 select_map = make_selection_map(render_deprivation_map, "deprivation")
 select_map()

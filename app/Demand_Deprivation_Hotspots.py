@@ -5,6 +5,7 @@ from app.utils import (
     write_terminal_html,
     page_styling,
     load_demand_deprivation_hotspots,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import HOTSPOTS_DEMAND_DEPRIVATION
 from app.maps import render_demand_deprivation_hotspots_maps, make_selection_map
@@ -38,6 +39,7 @@ if not st.session_state.site_submitted_demand_deprivation_hotspots:
     st.iframe(
         "app/assets/terminal_working/demand_deprivation_hotspots.html", height=375
     )
+    render_prior_choice_recap(HOTSPOTS_DEMAND_DEPRIVATION)
 
 hotspots_selection_map = make_selection_map(
     partial(render_demand_deprivation_hotspots_maps, hotspots_gdf),

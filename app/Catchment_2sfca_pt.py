@@ -4,6 +4,7 @@ from app.utils import (
     write_terminal_html,
     page_styling,
     setup_lokigi_site_problem_2sfca_pt,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import TWO_SFCA_PT
 from app.maps import render_2sfca_map, make_selection_map
@@ -38,6 +39,7 @@ if not st.session_state.site_submitted_2sfca_pt:
         output_path="app/assets/terminal_working/2sfca_pt.html",
     )
     st.iframe("app/assets/terminal_working/2sfca_pt.html", height=400)
+    render_prior_choice_recap(TWO_SFCA_PT)
 
 # The proposed (blue) markers on this map remain clickable and drive the site
 # selection; render_2sfca_map returns the st_folium result for that flow.

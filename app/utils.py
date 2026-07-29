@@ -83,6 +83,25 @@ SITE_SELECTION_LABELS = {
     "final": "your final decision",
 }
 
+# Investigation ids (used by ``pages_visited`` and the investigation graph in
+# utils_investigations.py) don't always match the SITE_SELECTION_SUBMITTABLE /
+# confirmed_site_* keys used for site choices - a few pages' site keys drifted
+# from their investigation id. This maps id -> site key so the two can be
+# joined (see ``most_recent_prior_choice``).
+INVESTIGATION_ID_TO_SITE_KEY = {
+    "demand": "demand",
+    "deprivation": "deprivation",
+    "travel_car": "car_travel",
+    "travel_pt": "public_transport",
+    "hotspots_combined": "demand_deprivation_hotspots",
+    "hotspots_demand_travel": "demand_travel_hotspots",
+    "hotspots_deprivation_travel": "deprivation_travel_hotspots",
+    "2sfca_car": "2sfca_car",
+    "2sfca_pt": "2sfca_pt",
+    "utilisation": "utilisation",
+    "projected_demand": "projected_demand",
+}
+
 
 # Load datasets
 @st.cache_data
@@ -399,6 +418,47 @@ def record_page_visited(investigation: Investigation) -> None:
                 "analyst_days": investigation.analyst_days,
             }
         )
+
+
+def most_recent_prior_choice(current_investigation_id: str) -> dict | None:
+    """The most recently confirmed site from an earlier investigation, if any.
+
+    Walks ``pages_visited`` newest-first (skipping the current page) and
+    returns the first ``{"What": ..., "Site": ...}`` dict that actually has a
+    confirmed site recorded - so a page that was visited but left without
+    submitting (possible via direct URL navigation, which bypasses the
+    button-only gating) is skipped rather than returned as a false memory.
+    """
+    for visit in reversed(st.session_state.pages_visited):
+        if visit["id"] == current_investigation_id:
+            continue
+        site_key = INVESTIGATION_ID_TO_SITE_KEY.get(visit["id"])
+        if site_key is None:
+            continue
+        choice = st.session_state.get(f"confirmed_site_{site_key}")
+        if choice is not None:
+            return choice
+    return None
+
+
+def render_prior_choice_recap(investigation: Investigation) -> None:
+    """Remind the user what they last committed to, before they see new evidence.
+
+    Without this, every evidence page renders identically regardless of what
+    came before it: the investigation graph gates *which* pages you can
+    reach, but nothing downstream reads what happened upstream. This is the
+    cheapest way to make earlier choices visibly carry forward - and it sets
+    up the "did this change your mind?" question every subsequent page is
+    implicitly asking.
+    """
+    prior = most_recent_prior_choice(investigation.id)
+    if prior is None:
+        return
+    st.info(
+        f"Last time you committed to a site, you picked **{prior['Site']}** "
+        f"— based on {prior['What']}. Let's see what this page adds.",
+        icon=":material/history:",
+    )
 
 
 def _prerequisites_met(investigation: Investigation) -> bool:

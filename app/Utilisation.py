@@ -3,6 +3,7 @@ from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import UTILISATION
 from app.maps import render_utilisation_map, make_selection_map
@@ -32,6 +33,7 @@ if not st.session_state.site_submitted_utilisation:
         output_path="app/assets/terminal_working/utilisation.html",
     )
     st.iframe("app/assets/terminal_working/utilisation.html", height=400)
+    render_prior_choice_recap(UTILISATION)
 
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")
 utilisation_selection_map()

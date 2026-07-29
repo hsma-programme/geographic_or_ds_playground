@@ -6,6 +6,7 @@ from app.utils import (
     page_styling,
     TERMINAL_DEFAULT_SPEED,
     write_terminal_html,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import TRAVEL_PT
 from app.maps import render_travel_maps, make_selection_map
@@ -49,6 +50,7 @@ if not st.session_state.site_submitted_public_transport:
     )
 
     st.iframe("app/assets/terminal_working/travel_public_transport.html")
+    render_prior_choice_recap(TRAVEL_PT)
 
 # Note the session key doesn't follow the name of the page as the automated rules
 # would make it display weirdly
