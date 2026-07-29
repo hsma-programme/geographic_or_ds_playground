@@ -4,12 +4,15 @@ from app.utils import (
     load_devon_sites,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
+    PARETO_METRICS,
+    metric_spreads,
+    objective_champions,
+    compromise_options,
 )
 import time
 from PIL import Image
 import pandas as pd
 import pickle
-from lokigi.multiobjective import ParetoMetric
 
 st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
@@ -96,12 +99,10 @@ if run:
 # and forcing a full re-watch of the spinner/GIF theatre above just to see
 # them again. The animation itself only ever plays once, inside `if run:`.
 if st.session_state.get("optimise_5_sites_ran"):
-    best_combo = solution.return_best_combination_site_names()
-    best_additional = [i for i in best_combo if i not in existing_sites]
-
-    st.success(
-        f"Based on the impact on weighted average travel time alone, the optimiser finds the best additional site to be {best_additional[0]}."
-    )
+    # Computed here, before anything is rendered, so the shortlist below and
+    # the plots in tabs 2-3 all read from the same is_pareto_optimal /
+    # dominated_by columns rather than tab 2 computing them again later.
+    solution.compute_pareto_front(metrics=PARETO_METRICS)
 
     solution_df_display = (
         solution.solution_df.copy()
@@ -152,6 +153,122 @@ if st.session_state.get("optimise_5_sites_ran"):
             raise ValueError(f"'{selected_site}' not found in dataframe.")
 
         return matches[0] + 1
+
+    metric_by_col = {m.column: m for m in PARETO_METRICS}
+
+    def format_metric_value(column: str, value: float) -> str:
+        if column == "proportion_within_coverage_threshold":
+            return f"{value * 100:.1f}% covered within 30 min"
+        m = metric_by_col[column]
+        if m.unit:
+            return f"{value:.1f} {m.unit} ({m.label})"
+        return f"{value:.2f} ({m.label})"
+
+    champions = objective_champions(solution_df_ranking, site_col="site")
+    spreads = metric_spreads(solution_df_ranking)
+    compromises = compromise_options(solution_df_ranking, site_col="site")
+    n_total = len(solution_df_ranking)
+    n_front = int(solution_df_ranking["is_pareto_optimal"].sum())
+
+    st.markdown(
+        f"The optimiser compared all **{n_total}** possible combinations against "
+        f"**{len(PARETO_METRICS)}** different measures. **{n_front} of them are "
+        "defensible** - nothing else beats them across the board. Each is the "
+        "best answer to a different question."
+    )
+
+    badge_counts: dict[str, int] = {}
+    for champ in champions:
+        for badge in champ["badges"]:
+            badge_counts[badge] = badge_counts.get(badge, 0) + 1
+
+    for champ in champions:
+        with st.container(border=True):
+            solo_badges = [b for b in champ["badges"] if badge_counts[b] == 1]
+            joint_badges = [b for b in champ["badges"] if badge_counts[b] > 1]
+            badge_parts = []
+            if solo_badges:
+                badge_parts.append("best for " + ", ".join(solo_badges))
+            if joint_badges:
+                badge_parts.append("joint best for " + ", ".join(joint_badges))
+
+            st.markdown(
+                f":material/location_on: **{champ['site']}** — "
+                + "; ".join(badge_parts)
+            )
+
+            badge_cols = [
+                m.column for m in PARETO_METRICS if m.label in champ["badges"]
+            ]
+            st.caption(
+                " · ".join(
+                    format_metric_value(col, champ["values"][col])
+                    for col in badge_cols
+                )
+            )
+
+            weakest_label, weakest_rank, weakest_n = champ["weakest"]
+            st.caption(
+                f"Gives ground on: {weakest_label} "
+                f"({ordinal(weakest_rank)} of {weakest_n})"
+            )
+
+    if compromises:
+        plural = len(compromises) != 1
+        st.caption(
+            f"{len(compromises)} further combination{'s' if plural else ''} "
+            f"{'are' if plural else 'is'} never beaten across the board, but not "
+            "the best at any single measure either."
+        )
+
+    # Flagged by an outright tie for the best value, not by the raw spread -
+    # spread is in different units per metric (minutes vs a 0-1 proportion vs
+    # a ratio), so a single absolute threshold would flag every proportion-
+    # or ratio-based metric as "flat" regardless of whether it actually
+    # separates the field. A genuine tie for best is scale-independent: it
+    # means the badge doesn't even uniquely distinguish one option.
+    flat_spreads = [
+        (metric_by_col[col].label, s)
+        for col, s in spreads.items()
+        if s["n_tied_at_best"] > 1
+    ]
+    if flat_spreads:
+        flat_bits = "; ".join(
+            f"{label} varies by only {s['spread']:.2f} across all {n_total} options, "
+            f"with {s['n_tied_at_best']} tied for best"
+            for label, s in flat_spreads
+        )
+        st.caption(
+            f"Worth noting: {flat_bits}. A badge on a measure this flat is worth "
+            "less than one on a measure that genuinely separates the field."
+        )
+
+    champion_sites = {c["site"] for c in champions}
+    selected_row = solution_df_ranking[solution_df_ranking["site"] == selected_site].iloc[0]
+
+    if selected_site in champion_sites:
+        selected_badges = next(
+            c["badges"] for c in champions if c["site"] == selected_site
+        )
+        st.info(
+            f"Your choice, **{selected_site}**, is one of the shortlisted options above - "
+            f"it's best for {', '.join(selected_badges)}."
+        )
+    elif selected_row["is_pareto_optimal"]:
+        st.info(
+            f"Your choice, **{selected_site}**, is on the shortlist of defensible options - "
+            "nothing beats it across the board - but it isn't the best at any single measure."
+        )
+    else:
+        n_dominators = len(selected_row["dominated_by"])
+        st.warning(
+            f"Your choice, **{selected_site}**, is beaten outright by "
+            f"{n_dominators} other combination{'s' if n_dominators != 1 else ''} - "
+            "at least one alternative does at least as well on every measure, and "
+            "better on some."
+        )
+
+    st.divider()
 
     weighted = ordinal(
         get_solution_rank(
@@ -255,6 +372,7 @@ Your solution is the:
         display_columns = [
             "solution_rank",
             "site",
+            "is_pareto_optimal",
             "weighted_average",
             "unweighted_average",
             "90th_percentile",
@@ -275,6 +393,10 @@ Your solution is the:
                 ),
                 "site": st.column_config.TextColumn(
                     "Site(s)",
+                ),
+                "is_pareto_optimal": st.column_config.CheckboxColumn(
+                    "Defensible?",
+                    help="Nothing else in this list beats it across every measure at once.",
                 ),
                 "weighted_average": st.column_config.NumberColumn(
                     "Weighted average (mins)",
@@ -314,43 +436,16 @@ Your solution is the:
     with tab_2:
         st.subheader("Comparing the best solutions across multiple metrics")
 
-        metrics = [
-            ParetoMetric(
-                column="weighted_average",
-                direction="lower_better",
-                label="weighted average travel time",
-                unit="minutes",
-            ),
-            ParetoMetric(
-                column="max",
-                direction="lower_better",
-                label="maximum travel time",
-                unit="minutes",
-            ),
-            ParetoMetric(
-                column="proportion_within_coverage_threshold",
-                direction="higher_better",
-                label="proportion within coverage threshold",
-            ),
-            ParetoMetric(
-                column="inter_tertile_ratio",
-                direction="lower_better",
-                label="ratio of weighted travel times in IMD 1-3 to IMD 7-10",
-            ),
-            ParetoMetric(
-                column="avg_lower_third_bins",
-                direction="lower_better",
-                label="average travel time for those in IMD 1-3",
-                unit="minutes",
-            ),
-        ]
-
-        solution.compute_pareto_front(metrics=metrics)
-
+        # Pareto front already computed above, on the same PARETO_METRICS used
+        # for the objective-champion shortlist, so this plots exactly what
+        # produced that shortlist rather than a separately-defined metric set.
         st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
 
         st.caption(
-            "An inter-tertile ratio of below 1 means those in IMD 1-3 (most deprived) have a shorter travel time on average than those in IMD 7-10 (least deprived)"
+            "An inter-tertile ratio below 1 means those in IMD 1-3 (most deprived) travel "
+            "less on average than those in IMD 7-10 (least deprived). This tool scores lower "
+            "as always better here - a deliberate choice to reward actively cutting travel "
+            "times for the most deprived group, not just narrowing the gap to zero."
         )
 
     with tab_3:

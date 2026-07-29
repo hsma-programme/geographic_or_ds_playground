@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import streamlit as st
 import geopandas
 import html
@@ -10,6 +11,7 @@ from io import BytesIO
 from pathlib import Path
 import os
 from lokigi.site import SiteProblem
+from lokigi.multiobjective import ParetoMetric
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
@@ -48,6 +50,169 @@ RANK_METRIC_LABELS = {
     "proportion_within_coverage_threshold": "coverage within the travel time threshold",
     "inter_tertile_ratio": "equity (inter-tertile ratio)",
 }
+
+# The multi-objective metric set used on the Optimise pages, both for the
+# lokigi Pareto-front computation and for the objective-champion shortlist
+# that replaces a single "best on weighted average travel time" headline.
+# Defined once here rather than copy-pasted per page so the two Optimise
+# pages and the shortlist helpers below always agree on what "an objective"
+# means.
+#
+# inter_tertile_ratio is deliberately scored "lower is better", not "closest
+# to 1.0" - this is a stance, not just a modelling default. It rewards
+# actively reducing travel time for the most deprived group relative to the
+# least deprived (progressive universalism), rather than treating perfect
+# evenness as the ideal. Scoring it against a target of 1.0 instead would
+# both change which options make the shortlist and loosen the Pareto front
+# considerably (verified: 9/14 vs 5/14 on the 5-site solution).
+PARETO_METRICS = [
+    ParetoMetric(
+        column="weighted_average",
+        direction="lower_better",
+        label="average travel time",
+        unit="minutes",
+    ),
+    ParetoMetric(
+        column="max",
+        direction="lower_better",
+        label="worst-case travel time",
+        unit="minutes",
+    ),
+    ParetoMetric(
+        column="proportion_within_coverage_threshold",
+        direction="higher_better",
+        label="coverage within the travel time threshold",
+    ),
+    ParetoMetric(
+        column="inter_tertile_ratio",
+        direction="lower_better",
+        label="equity (inter-tertile ratio)",
+    ),
+    ParetoMetric(
+        column="avg_lower_third_bins",
+        direction="lower_better",
+        label="travel time for the most deprived third",
+        unit="minutes",
+    ),
+]
+
+
+def metric_spreads(
+    solution_df: pd.DataFrame, metrics: list[ParetoMetric] = PARETO_METRICS
+) -> dict[str, dict]:
+    """
+    For each metric, how much the enumerated solutions actually differ.
+
+    Returns {column: {"min", "max", "spread", "n_tied_at_best"}}. Used to
+    flag objectives where the "best" option only just edges out a crowd of
+    others tied right behind it (or ties with several others outright) - a
+    badge on a measure like that is worth less than one on a measure that
+    genuinely separates the field.
+    """
+    spreads = {}
+    for m in metrics:
+        col = solution_df[m.column]
+        best = col.min() if m.direction != "higher_better" else col.max()
+        spreads[m.column] = {
+            "min": col.min(),
+            "max": col.max(),
+            "spread": col.max() - col.min(),
+            "n_tied_at_best": int(np.isclose(col, best).sum()),
+        }
+    return spreads
+
+
+def objective_champions(
+    solution_df: pd.DataFrame,
+    site_col: str = "site",
+    metrics: list[ParetoMetric] = PARETO_METRICS,
+) -> list[dict]:
+    """
+    Find, for each objective, every solution tied for the best value on it,
+    then group by site so a solution that wins on several objectives at
+    once appears once with all its badges attached.
+
+    Requires `solution_df["is_pareto_optimal"]` to already be set (i.e.
+    `solution.compute_pareto_front(metrics=...)` has run) - champions are
+    Pareto-optimal by construction (nothing beats the best value on its own
+    winning metric), but this asserts it rather than assuming it, since an
+    exact tie on every metric is the one edge case where it could fail.
+
+    Returns a list of dicts, one per champion site, each with:
+    - "site": the site name (or joined site names for multi-site solutions)
+    - "badges": list of metric labels this site is (jointly) best on
+    - "values": {column: raw value} for every metric, for display
+    - "weakest": (label, rank, n) for the metric this site ranks worst on
+
+    Ordered by number of badges (most first), then by weighted_average, so
+    the strongest all-rounder leads and ties resolve deterministically.
+    """
+    champions: dict[str, dict] = {}
+
+    for m in metrics:
+        best = (
+            solution_df[m.column].min()
+            if m.direction != "higher_better"
+            else solution_df[m.column].max()
+        )
+        winners = solution_df[np.isclose(solution_df[m.column], best)]
+        for _, row in winners.iterrows():
+            site = row[site_col]
+            entry = champions.setdefault(
+                site,
+                {
+                    "site": site,
+                    "badges": [],
+                    "values": {mm.column: row[mm.column] for mm in metrics},
+                    "_row": row,
+                },
+            )
+            entry["badges"].append(m.label)
+
+    ranks = pd.DataFrame(
+        {
+            m.column: solution_df[m.column].rank(
+                method="min", ascending=(m.direction != "higher_better")
+            )
+            for m in metrics
+        },
+        index=solution_df.index,
+    )
+    n_total = len(solution_df)
+
+    for site, entry in champions.items():
+        row_idx = entry["_row"].name
+        row_ranks = ranks.loc[row_idx]
+        weakest_col = row_ranks.idxmax()
+        weakest_label = next(m.label for m in metrics if m.column == weakest_col)
+        entry["weakest"] = (weakest_label, int(row_ranks[weakest_col]), n_total)
+        assert bool(entry["_row"].get("is_pareto_optimal", True)), (
+            f"Champion '{site}' is not Pareto-optimal - unexpected unless "
+            "every metric is tied across the whole solution set."
+        )
+        del entry["_row"]
+
+    return sorted(
+        champions.values(),
+        key=lambda e: (-len(e["badges"]), e["values"]["weighted_average"]),
+    )
+
+
+def compromise_options(
+    solution_df: pd.DataFrame,
+    site_col: str = "site",
+    metrics: list[ParetoMetric] = PARETO_METRICS,
+) -> list[str]:
+    """
+    Pareto-optimal solutions that are not the (joint) best on any single
+    objective - never beaten across the board, but not the champion of
+    anything either. Empty whenever the champion set already covers the
+    whole Pareto front (verified true for the 5-site solution; the 6-site
+    solution has 6 such compromise options alongside its 5 champions).
+    """
+    champion_sites = {c["site"] for c in objective_champions(solution_df, site_col, metrics)}
+    front = solution_df[solution_df["is_pareto_optimal"]]
+    return [s for s in front[site_col] if s not in champion_sites]
 
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
