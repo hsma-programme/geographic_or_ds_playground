@@ -159,15 +159,15 @@ force_sidebar_state(expanded=pg is not pages[0], page_key=pg.url_path)
 
 # The running notepad and the "start over" escape hatch live in the sidebar so
 # they're available consistently on every page, rather than only on the pages
-# that happened to embed them inline. No point offering "start over" before
-# there's any progress to lose.
+# that happened to embed them inline. Kept unconditional (not gated on
+# pages_visited) so it's always the way out of a stuck/corrupted session -
+# gating it on progress existing meant a user who got stuck early (e.g. via a
+# cache clear leaving session state mid-way through hydrating) had no visible
+# escape hatch at all.
 with st.sidebar:
     render_notes_textbox()
-    if st.session_state.pages_visited:
-        st.divider()
-        render_reset_button(
-            label="Start over from the beginning", key="reset_sidebar"
-        )
+    st.divider()
+    render_reset_button(label="Start over from the beginning", key="reset_sidebar")
 
 pg.run()
 

@@ -14,15 +14,6 @@ from num2words import num2words
 st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
 page_styling()
 
-# Unlike every other page, the sidebar's expand toggle stays hidden here while
-# collapsed - the homepage should read as a clean welcome screen, with no
-# invitation to open a sidebar that (before the user has started) has nothing
-# but an empty notepad in it.
-st.markdown(
-    "<style>[data-testid='stExpandSidebarButton'] { display: none }</style>",
-    unsafe_allow_html=True,
-)
-
 st.title("Welcome")
 
 cola, colb = st.columns([0.7, 0.3])
