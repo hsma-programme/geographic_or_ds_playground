@@ -77,9 +77,7 @@ TRAVEL_PT = Investigation(
     prerequisites=[],
     parent="travel_car",
     recommended_next=["travel_car", "demand"],
-    analyst_prompt=(
-        "Look at travel times by car if patients are using public transport."
-    ),
+    analyst_prompt=("Look at travel times if patients are using public transport."),
     is_entry_point=False,
     analyst_days=5,
     icon="train",
