@@ -319,7 +319,7 @@ Your solution is the:
 
         @st.fragment
         def plot_best_sols():
-            rank_on = st.radio(
+            sort_by = st.radio(
                 "Rank On...",
                 [
                     "weighted_average",
@@ -335,12 +335,12 @@ Your solution is the:
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[rank_on]}")
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
                 ax = solution.plot_best_combination(
                     solution_rank=1,
-                    rank_on=rank_on,
+                    sort_by=sort_by,
                     plot_regions_not_meeting_threshold=True
-                    if rank_on == "proportion_within_coverage_threshold"
+                    if sort_by == "proportion_within_coverage_threshold"
                     else False,
                 )
                 st.pyplot(ax.figure)
@@ -350,13 +350,13 @@ Your solution is the:
                     solution_rank=get_solution_rank(
                         solution_df_ranking,
                         selected_site,
-                        rank_on,
-                        ascending=RANK_METRIC_ASCENDING[rank_on],
+                        sort_by,
+                        ascending=RANK_METRIC_ASCENDING[sort_by],
                     ),
                     plot_regions_not_meeting_threshold=True
-                    if rank_on == "proportion_within_coverage_threshold"
+                    if sort_by == "proportion_within_coverage_threshold"
                     else False,
-                    rank_on=rank_on,
+                    sort_by=sort_by,
                 )
                 st.pyplot(ax.figure)
 

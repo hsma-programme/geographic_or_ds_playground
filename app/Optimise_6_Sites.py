@@ -362,7 +362,7 @@ if st.session_state.get("optimise_6_sites_ran"):
 
         @st.fragment
         def plot_best_sols():
-            rank_on = st.radio(
+            sort_by = st.radio(
                 "Rank On...",
                 [
                     "weighted_average",
@@ -377,22 +377,22 @@ if st.session_state.get("optimise_6_sites_ran"):
                 key="rank_on_6",
             )
 
-            plot_threshold = rank_on == "proportion_within_coverage_threshold"
-            ascending = RANK_METRIC_ASCENDING[rank_on]
+            plot_threshold = sort_by == "proportion_within_coverage_threshold"
+            ascending = RANK_METRIC_ASCENDING[sort_by]
 
             # solution.solution_df (full precision), not solution_df_display -
             # see the note on true_best_pair() above.
             comparison_rank = get_best_rank_including_site(
-                solution.solution_df, selected_site, rank_on, ascending=ascending
+                solution.solution_df, selected_site, sort_by, ascending=ascending
             )
 
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[rank_on]}")
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
                 ax = solution.plot_best_combination(
                     solution_rank=1,
-                    rank_on=rank_on,
+                    sort_by=sort_by,
                     plot_regions_not_meeting_threshold=plot_threshold,
                 )
                 st.pyplot(ax.figure)
@@ -400,29 +400,29 @@ if st.session_state.get("optimise_6_sites_ran"):
                 st.subheader(f"Best Solution Still Including {selected_site}")
                 ax = solution.plot_best_combination(
                     solution_rank=comparison_rank,
-                    rank_on=rank_on,
+                    sort_by=sort_by,
                     plot_regions_not_meeting_threshold=plot_threshold,
                 )
                 st.pyplot(ax.figure)
 
-            rank_on_label = RANK_METRIC_LABELS[rank_on]
+            sort_by_label = RANK_METRIC_LABELS[sort_by]
 
             st.caption(
                 f"Out of all {n_combinations} possible two-site combinations, this is "
                 f"the best one that still keeps **{selected_site}** - it ranks "
-                f"**{ordinal(comparison_rank)}** overall by {rank_on_label}."
+                f"**{ordinal(comparison_rank)}** overall by {sort_by_label}."
             )
 
-            naive_pair = naive_top_two_pair(rank_on, ascending)
-            best_pair = true_best_pair(rank_on, ascending)
+            naive_pair = naive_top_two_pair(sort_by, ascending)
+            best_pair = true_best_pair(sort_by, ascending)
             if naive_pair == best_pair:
                 st.caption(
-                    f"For {rank_on_label}, simply combining the two best *individual* "
+                    f"For {sort_by_label}, simply combining the two best *individual* "
                     "sites from the single-site page would have found this same best pair."
                 )
             else:
                 st.caption(
-                    f"For {rank_on_label}, the two best *individual* sites from the "
+                    f"For {sort_by_label}, the two best *individual* sites from the "
                     f"single-site page were **{' and '.join(sorted(naive_pair))}** - "
                     "but that isn't the best pair (shown on the left). Sites compete "
                     "for the same demand, so the jointly optimal choice can differ "

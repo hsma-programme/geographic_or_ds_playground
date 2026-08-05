@@ -11,11 +11,19 @@ from io import BytesIO
 from pathlib import Path
 import os
 from lokigi.site import SiteProblem
-from lokigi.multiobjective import ParetoMetric
+from lokigi.multiobjective import Metric
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
 MAXIMUM_BRIEFINGS = 6
+
+# What counts as a "meaningfully" shorter journey when comparing a candidate
+# network against today's. 5 minutes, not 0 - at 0 the metric degenerates into
+# "everyone who would switch to the new site", which is a catchment headcount
+# dressed up as an improvement measure.
+MEANINGFUL_CHANGE_MINUTES = 5.0
+COVERAGE_THRESHOLD_MINUTES = 30
+LEFT_BEHIND_THRESHOLDS = [45, 60]
 
 # Shared basemap for every folium/leaflet map in the app, so switching styles
 # only requires changing this one value. CartoDB Voyager keeps roads/labels
@@ -66,29 +74,29 @@ RANK_METRIC_LABELS = {
 # both change which options make the shortlist and loosen the Pareto front
 # considerably (verified: 9/14 vs 5/14 on the 5-site solution).
 PARETO_METRICS = [
-    ParetoMetric(
+    Metric(
         column="weighted_average",
         direction="lower_better",
         label="average travel time",
         unit="minutes",
     ),
-    ParetoMetric(
+    Metric(
         column="max",
         direction="lower_better",
         label="worst-case travel time",
         unit="minutes",
     ),
-    ParetoMetric(
+    Metric(
         column="proportion_within_coverage_threshold",
         direction="higher_better",
         label="coverage within the travel time threshold",
     ),
-    ParetoMetric(
+    Metric(
         column="inter_tertile_ratio",
         direction="lower_better",
         label="equity (inter-tertile ratio)",
     ),
-    ParetoMetric(
+    Metric(
         column="avg_lower_third_bins",
         direction="lower_better",
         label="travel time for the most deprived third",
@@ -98,7 +106,7 @@ PARETO_METRICS = [
 
 
 def metric_spreads(
-    solution_df: pd.DataFrame, metrics: list[ParetoMetric] = PARETO_METRICS
+    solution_df: pd.DataFrame, metrics: list[Metric] = PARETO_METRICS
 ) -> dict[str, dict]:
     """
     For each metric, how much the enumerated solutions actually differ.
@@ -125,7 +133,7 @@ def metric_spreads(
 def objective_champions(
     solution_df: pd.DataFrame,
     site_col: str = "site",
-    metrics: list[ParetoMetric] = PARETO_METRICS,
+    metrics: list[Metric] = PARETO_METRICS,
 ) -> list[dict]:
     """
     Find, for each objective, every solution tied for the best value on it,
@@ -201,7 +209,7 @@ def objective_champions(
 def compromise_options(
     solution_df: pd.DataFrame,
     site_col: str = "site",
-    metrics: list[ParetoMetric] = PARETO_METRICS,
+    metrics: list[Metric] = PARETO_METRICS,
 ) -> list[str]:
     """
     Pareto-optimal solutions that are not the (joint) best on any single
@@ -210,9 +218,12 @@ def compromise_options(
     whole Pareto front (verified true for the 5-site solution; the 6-site
     solution has 6 such compromise options alongside its 5 champions).
     """
-    champion_sites = {c["site"] for c in objective_champions(solution_df, site_col, metrics)}
+    champion_sites = {
+        c["site"] for c in objective_champions(solution_df, site_col, metrics)
+    }
     front = solution_df[solution_df["is_pareto_optimal"]]
     return [s for s in front[site_col] if s not in champion_sites]
+
 
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
@@ -1060,7 +1071,7 @@ def select_site_from_current_evidence():
 
 @st.cache_data
 def load_car_travel_matrix():
-    return pd.read_csv("data/travel_matrix_car.csv").fillna(9999.0)
+    return pd.read_csv("data/travel_matrix_car.csv")
 
 
 @st.cache_data
@@ -1080,12 +1091,13 @@ def setup_lokigi_site_problem_BASE():
         load_devon_geography(), common_col="LSOA21NM"
     )
 
-    # lokigi_site_problem.add_equity_data(
-    #     load_deprivation(),
-    #     equity_col="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
-    #     common_col="LSOA name (2021)",
-    #     label="IMD",
-    # )
+    lokigi_site_problem.add_equity_data(
+        load_deprivation(),
+        equity_col="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+        common_col="LSOA name (2021)",
+        label="IMD",
+        disadvantaged_end="low",  # decile 1 = most deprived
+    )
 
     return lokigi_site_problem
 
@@ -1169,7 +1181,11 @@ def setup_lokigi_site_problem_pt():
     )
 
     lokigi_site_problem.add_travel_matrix(
-        load_pt_travel_matrix(), unit="minutes", source_col="from_id"
+        load_pt_travel_matrix(),
+        unit="minutes",
+        source_col="from_id",
+        allow_missing=True,
+        treat_as_missing=9999,
     )
 
     return lokigi_site_problem
@@ -1180,7 +1196,11 @@ def solve_pt_travel():
     # D4 fix, PT counterpart of solve_car_existing_travel() above - see that
     # function's comment for why caching the solve() call (not just the
     # problem setup) is what actually removes the per-rerun cost.
-    return setup_lokigi_site_problem_pt().solve(p=4)
+    # unreachable_cost is set well above any plausible journey time (the
+    # longest real PT trip in the matrix is nowhere close) so the 109 cells
+    # that treat_as_missing above converts to NaN are penalised rather than
+    # silently dropped from ranking.
+    return setup_lokigi_site_problem_pt().solve(p=4, unreachable_cost=360.0)
 
 
 def _setup_lokigi_site_problem_2sfca(travel_matrix):
@@ -1203,7 +1223,11 @@ def _setup_lokigi_site_problem_2sfca(travel_matrix):
     )
 
     lokigi_site_problem.add_travel_matrix(
-        travel_matrix, unit="minutes", source_col="from_id"
+        travel_matrix,
+        unit="minutes",
+        source_col="from_id",
+        allow_missing=True,
+        treat_as_missing=9999,
     )
 
     return lokigi_site_problem
