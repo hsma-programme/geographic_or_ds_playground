@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     page_styling,
@@ -33,7 +34,7 @@ if not st.session_state.site_submitted_final:
         intro_text,
         output_path="app/assets/terminal_working/decide.html",
     )
-    st.iframe("app/assets/terminal_working/decide.html", height=200)
+    st.iframe(Path("app/assets/terminal_working/decide.html"), height=200)
 
     n = len(valid_decisions)
     distinct_sites = {decision["Site"] for decision in valid_decisions}
@@ -84,7 +85,7 @@ if not st.session_state.site_submitted_final:
         intro_text,
         output_path="app/assets/terminal_working/decide_2.html",
     )
-    st.iframe("app/assets/terminal_working/decide_2.html", height=120)
+    st.iframe(Path("app/assets/terminal_working/decide_2.html"), height=120)
 
     st.write("<br>", unsafe_allow_html=True)
 

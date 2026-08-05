@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from functools import partial
 from app.utils import (
@@ -37,7 +38,8 @@ if not st.session_state.site_submitted_deprivation_travel_hotspots:
         output_path="app/assets/terminal_working/deprivation_travel_hotspots.html",
     )
     st.iframe(
-        "app/assets/terminal_working/deprivation_travel_hotspots.html", height=375
+        Path("app/assets/terminal_working/deprivation_travel_hotspots.html"),
+        height=375,
     )
     render_prior_choice_recap(HOTSPOTS_DEPRIVATION_TRAVEL)
 

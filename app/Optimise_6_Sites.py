@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     page_styling,
@@ -48,7 +49,7 @@ char_count, reveal_speed = write_terminal_html(
     output_path="app/assets/terminal_working/optimise_6_sites.html",
 )
 
-st.iframe("app/assets/terminal_working/optimise_6_sites.html", height=325)
+st.iframe(Path("app/assets/terminal_working/optimise_6_sites.html"), height=325)
 
 
 def get_gif_duration(filename):

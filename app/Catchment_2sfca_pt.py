@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
@@ -38,7 +39,7 @@ if not st.session_state.site_submitted_2sfca_pt:
         intro_text,
         output_path="app/assets/terminal_working/2sfca_pt.html",
     )
-    st.iframe("app/assets/terminal_working/2sfca_pt.html", height=400)
+    st.iframe(Path("app/assets/terminal_working/2sfca_pt.html"), height=400)
     render_prior_choice_recap(TWO_SFCA_PT)
 
 # The proposed (blue) markers on this map remain clickable and drive the site

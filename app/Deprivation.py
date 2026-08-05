@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     write_terminal_html,
@@ -39,7 +40,7 @@ if not st.session_state.site_submitted_deprivation:
     )
     st.session_state.deprivation_page_visited = True
 
-    st.iframe("app/assets/terminal_working/deprivation_page.html")
+    st.iframe(Path("app/assets/terminal_working/deprivation_page.html"))
     render_prior_choice_recap(DEPRIVATION)
 
 select_map = make_selection_map(render_deprivation_map, "deprivation")

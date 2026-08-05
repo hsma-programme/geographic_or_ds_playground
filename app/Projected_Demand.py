@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
@@ -32,7 +33,7 @@ if not st.session_state.site_submitted_projected_demand:
         intro_text,
         output_path="app/assets/terminal_working/projected_demand.html",
     )
-    st.iframe("app/assets/terminal_working/projected_demand.html", height=375)
+    st.iframe(Path("app/assets/terminal_working/projected_demand.html"), height=375)
     render_prior_choice_recap(PROJECTED_DEMAND)
 
 projected_demand_selection_map = make_selection_map(

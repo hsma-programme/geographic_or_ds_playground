@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
@@ -32,7 +33,7 @@ if not st.session_state.site_submitted_utilisation:
         intro_text,
         output_path="app/assets/terminal_working/utilisation.html",
     )
-    st.iframe("app/assets/terminal_working/utilisation.html", height=400)
+    st.iframe(Path("app/assets/terminal_working/utilisation.html"), height=400)
     render_prior_choice_recap(UTILISATION)
 
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")

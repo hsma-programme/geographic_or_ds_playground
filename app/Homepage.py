@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     write_terminal_html,
@@ -47,7 +48,7 @@ write_terminal_html(
 st.session_state.homepage_visited = True
 
 with cola:
-    st.iframe("app/assets/terminal_working/homepage.html")
+    st.iframe(Path("app/assets/terminal_working/homepage.html"))
 
 with colb:
     generated_crt = write_crt_html(
@@ -56,7 +57,7 @@ with colb:
         curvature=0.5,
         scanlines=0.6,
     )
-    st.iframe(generated_crt)
+    st.iframe(Path(generated_crt))
 
 render_capacity_status()
 
