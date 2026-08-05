@@ -43,6 +43,9 @@ RANK_METRIC_ASCENDING = {
     "max": True,
     "proportion_within_coverage_threshold": False,
     "inter_tertile_ratio": True,
+    "proportion_demand_improved": False,
+    "mean_reduction_among_improved": False,
+    "demand_beyond_threshold_45": True,
 }
 
 # Human-readable phrasing for each optimiser metric column, for embedding in
@@ -57,7 +60,26 @@ RANK_METRIC_LABELS = {
     "max": "maximum travel time",
     "proportion_within_coverage_threshold": "coverage within the travel time threshold",
     "inter_tertile_ratio": "equity (inter-tertile ratio)",
+    "proportion_demand_improved": "people with a meaningfully shorter journey",
+    "mean_reduction_among_improved": "minutes saved for those who benefit",
+    "demand_beyond_threshold_45": "people still more than 45 minutes away",
 }
+
+# Columns summarised in the "your solution is the Nth best..." bullet list on
+# each Optimise page. A deliberate subset of RANK_METRIC_LABELS - narrower
+# than the tab-1 "rank on" radio (which also offers inter_tertile_ratio and
+# mean_reduction_among_improved) because this bullet list is meant to be
+# skimmed as one paragraph, not read as a full menu of every measure the
+# optimiser can rank on.
+ORDINAL_RANK_SUMMARY_METRICS = [
+    "weighted_average",
+    "unweighted_average",
+    "90th_percentile",
+    "max",
+    "proportion_within_coverage_threshold",
+    "proportion_demand_improved",
+    "demand_beyond_threshold_45",
+]
 
 # The multi-objective metric set used on the Optimise pages, both for the
 # lokigi Pareto-front computation and for the objective-champion shortlist
@@ -66,13 +88,33 @@ RANK_METRIC_LABELS = {
 # pages and the shortlist helpers below always agree on what "an objective"
 # means.
 #
+# weighted_average stays in deliberately: the page becomes a story about it
+# losing an argument to the other measures, not about it being quietly
+# dropped. max and proportion_within_coverage_threshold are not - they
+# remain available on the tab-1 "rank on" radio and in the results table,
+# but a p-median average and a threshold count don't tell you anything about
+# *how many people* actually benefit, which is the point of this shortlist.
+#
+# proportion_demand_improved (people with a meaningfully shorter journey,
+# see MEANINGFUL_CHANGE_MINUTES) is the replacement headline: it and
+# weighted_average can and do disagree, because a site can shave a little
+# off everyone's average while changing almost nobody's actual journey.
+#
+# mean_reduction_among_improved (minutes saved for those who benefit) is
+# deliberately left OUT of this Pareto set, though it's still offered on the
+# tab-1 radio and shown in the results table. Including it pushed the
+# defensible shortlist from 5/14 to 9/14 on the 5-site solution (24/91 on
+# the 6-site one) - too large a fraction of the field to read as a punchy
+# "these are the contenders" shortlist. Dropping it restores a tighter
+# 4/14 and 5/91 (verified against the regenerated pickles).
+#
 # inter_tertile_ratio is deliberately scored "lower is better", not "closest
 # to 1.0" - this is a stance, not just a modelling default. It rewards
 # actively reducing travel time for the most deprived group relative to the
 # least deprived (progressive universalism), rather than treating perfect
 # evenness as the ideal. Scoring it against a target of 1.0 instead would
 # both change which options make the shortlist and loosen the Pareto front
-# considerably (verified: 9/14 vs 5/14 on the 5-site solution).
+# considerably (verified: 9/14 vs 4/14 on the 5-site solution).
 PARETO_METRICS = [
     Metric(
         column="weighted_average",
@@ -81,15 +123,10 @@ PARETO_METRICS = [
         unit="minutes",
     ),
     Metric(
-        column="max",
-        direction="lower_better",
-        label="worst-case travel time",
-        unit="minutes",
-    ),
-    Metric(
-        column="proportion_within_coverage_threshold",
+        column="proportion_demand_improved",
         direction="higher_better",
-        label="coverage within the travel time threshold",
+        label="people with a meaningfully shorter journey",
+        as_percentage=True,
     ),
     Metric(
         column="inter_tertile_ratio",
@@ -223,6 +260,143 @@ def compromise_options(
     }
     front = solution_df[solution_df["is_pareto_optimal"]]
     return [s for s in front[site_col] if s not in champion_sites]
+
+
+def ordinal(n: int) -> str:
+    """Convert an integer to its ordinal representation."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def get_solution_rank(
+    solution_df: pd.DataFrame,
+    selected_site: str,
+    metric: str,
+    ascending: bool = False,
+) -> int:
+    """
+    Return the 1-based rank of a site for a given metric.
+    """
+    sorted_df = solution_df.sort_values(metric, ascending=ascending).reset_index(
+        drop=True
+    )
+
+    matches = sorted_df.index[sorted_df["site"] == selected_site]
+
+    if len(matches) == 0:
+        raise ValueError(f"'{selected_site}' not found in dataframe.")
+
+    return matches[0] + 1
+
+
+def format_metric_value(metric: Metric, value: float) -> str:
+    """
+    Render one metric's value with its label for a champion-badge caption,
+    e.g. "23.4 minutes (average travel time)". Delegates the number
+    formatting itself to Metric.format_value(), which already knows how to
+    render a percentage vs. a unit vs. a bare ratio.
+    """
+    return f"{metric.format_value(value)} ({metric.label})"
+
+
+def render_objective_champions(
+    champions: list[dict],
+    spreads: dict[str, dict],
+    compromises: list[str],
+    n_total: int,
+    metrics: list[Metric] = PARETO_METRICS,
+) -> None:
+    """
+    Render the objective-champion shortlist as one bordered card per site,
+    followed by the compromise-count and flat-spread captions. Shared by
+    both Optimise pages so the shortlist looks and reads identically -
+    `champions`/`spreads`/`compromises` come from `objective_champions()` /
+    `metric_spreads()` / `compromise_options()` above.
+    """
+    metric_by_col = {m.column: m for m in metrics}
+
+    badge_counts: dict[str, int] = {}
+    for champ in champions:
+        for badge in champ["badges"]:
+            badge_counts[badge] = badge_counts.get(badge, 0) + 1
+
+    for champ in champions:
+        with st.container(border=True):
+            solo_badges = [b for b in champ["badges"] if badge_counts[b] == 1]
+            joint_badges = [b for b in champ["badges"] if badge_counts[b] > 1]
+            badge_parts = []
+            if solo_badges:
+                badge_parts.append("best for " + ", ".join(solo_badges))
+            if joint_badges:
+                badge_parts.append("joint best for " + ", ".join(joint_badges))
+
+            st.markdown(
+                f":material/location_on: **{champ['site']}** — "
+                + "; ".join(badge_parts)
+            )
+
+            badge_cols = [m.column for m in metrics if m.label in champ["badges"]]
+            st.caption(
+                " · ".join(
+                    format_metric_value(metric_by_col[col], champ["values"][col])
+                    for col in badge_cols
+                )
+            )
+
+            weakest_label, weakest_rank, weakest_n = champ["weakest"]
+            st.caption(
+                f"Gives ground on: {weakest_label} "
+                f"({ordinal(weakest_rank)} of {weakest_n})"
+            )
+
+    if compromises:
+        plural = len(compromises) != 1
+        st.caption(
+            f"{len(compromises)} further combination{'s' if plural else ''} "
+            f"{'are' if plural else 'is'} never beaten across the board, but not "
+            "the best at any single measure either."
+        )
+
+    # Flagged by an outright tie for the best value, not by the raw spread -
+    # spread is in different units per metric (minutes vs a 0-1 proportion vs
+    # a ratio), so a single absolute threshold would flag every proportion-
+    # or ratio-based metric as "flat" regardless of whether it actually
+    # separates the field. A genuine tie for best is scale-independent: it
+    # means the badge doesn't even uniquely distinguish one option.
+    flat_spreads = [
+        (metric_by_col[col].label, s)
+        for col, s in spreads.items()
+        if s["n_tied_at_best"] > 1
+    ]
+    if flat_spreads:
+        flat_bits = "; ".join(
+            f"{label} varies by only {s['spread']:.2f} across all {n_total} options, "
+            f"with {s['n_tied_at_best']} tied for best"
+            for label, s in flat_spreads
+        )
+        st.caption(
+            f"Worth noting: {flat_bits}. A badge on a measure this flat is worth "
+            "less than one on a measure that genuinely separates the field."
+        )
+
+
+def render_ordinal_rank_summary(rank_of) -> None:
+    """
+    Render the "Your solution is the Nth best..." bullet list shared by both
+    Optimise pages, over ORDINAL_RANK_SUMMARY_METRICS.
+
+    `rank_of(metric)` must return the 1-based rank for that metric - callers
+    supply this as a closure since the two pages rank differently (a single
+    site's own rank vs. the best two-site pairing that still includes it).
+    """
+    bullets = "\n".join(
+        f"- **{ordinal(rank_of(m))}** best in terms of {RANK_METRIC_LABELS[m]}."
+        for m in ORDINAL_RANK_SUMMARY_METRICS
+    )
+    st.markdown(f"Your solution is the:\n\n{bullets}\n")
 
 
 SITE_SELECTION_SUBMITTABLE = [

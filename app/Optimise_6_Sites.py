@@ -9,6 +9,9 @@ from app.utils import (
     metric_spreads,
     objective_champions,
     compromise_options,
+    ordinal,
+    render_objective_champions,
+    render_ordinal_rank_summary,
 )
 import time
 from PIL import Image
@@ -167,24 +170,6 @@ if st.session_state.get("optimise_6_sites_ran"):
         lambda x: ", ".join(i for i in x if i not in existing_sites)
     )
 
-    def ordinal(n: int) -> str:
-        """Convert an integer to its ordinal representation."""
-        if 10 <= n % 100 <= 20:
-            suffix = "th"
-        else:
-            suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-        return f"{n}{suffix}"
-
-    metric_by_col = {m.column: m for m in PARETO_METRICS}
-
-    def format_metric_value(column: str, value: float) -> str:
-        if column == "proportion_within_coverage_threshold":
-            return f"{value * 100:.1f}% covered within 30 min"
-        m = metric_by_col[column]
-        if m.unit:
-            return f"{value:.1f} {m.unit} ({m.label})"
-        return f"{value:.2f} ({m.label})"
-
     champions = objective_champions(solution_df_ranking, site_col="site")
     spreads = metric_spreads(solution_df_ranking)
     compromises = compromise_options(solution_df_ranking, site_col="site")
@@ -198,68 +183,7 @@ if st.session_state.get("optimise_6_sites_ran"):
         "best answer to a different question."
     )
 
-    badge_counts: dict[str, int] = {}
-    for champ in champions:
-        for badge in champ["badges"]:
-            badge_counts[badge] = badge_counts.get(badge, 0) + 1
-
-    for champ in champions:
-        with st.container(border=True):
-            solo_badges = [b for b in champ["badges"] if badge_counts[b] == 1]
-            joint_badges = [b for b in champ["badges"] if badge_counts[b] > 1]
-            badge_parts = []
-            if solo_badges:
-                badge_parts.append("best for " + ", ".join(solo_badges))
-            if joint_badges:
-                badge_parts.append("joint best for " + ", ".join(joint_badges))
-
-            st.markdown(
-                f":material/location_on: **{champ['site']}** — "
-                + "; ".join(badge_parts)
-            )
-
-            badge_cols = [
-                m.column for m in PARETO_METRICS if m.label in champ["badges"]
-            ]
-            st.caption(
-                " · ".join(
-                    format_metric_value(col, champ["values"][col])
-                    for col in badge_cols
-                )
-            )
-
-            weakest_label, weakest_rank, weakest_n = champ["weakest"]
-            st.caption(
-                f"Gives ground on: {weakest_label} "
-                f"({ordinal(weakest_rank)} of {weakest_n})"
-            )
-
-    if compromises:
-        plural = len(compromises) != 1
-        st.caption(
-            f"{len(compromises)} further combination{'s' if plural else ''} "
-            f"{'are' if plural else 'is'} never beaten across the board, but not "
-            "the best at any single measure either."
-        )
-
-    # Flagged by an outright tie for the best value, not by the raw spread -
-    # see the matching comment in Optimise_5_Sites.py for why an absolute
-    # spread threshold would be scale-dependent and misleading here.
-    flat_spreads = [
-        (metric_by_col[col].label, s)
-        for col, s in spreads.items()
-        if s["n_tied_at_best"] > 1
-    ]
-    if flat_spreads:
-        flat_bits = "; ".join(
-            f"{label} varies by only {s['spread']:.2f} across all {n_total} options, "
-            f"with {s['n_tied_at_best']} tied for best"
-            for label, s in flat_spreads
-        )
-        st.caption(
-            f"Worth noting: {flat_bits}. A badge on a measure this flat is worth "
-            "less than one on a measure that genuinely separates the field."
-        )
+    render_objective_champions(champions, spreads, compromises, n_total)
 
     champion_sites = {c["site"] for c in champions}
     pairs_with_selected = solution_df_ranking[
@@ -349,6 +273,15 @@ if st.session_state.get("optimise_6_sites_ran"):
 
     n_combinations = len(solution_df_display)
 
+    render_ordinal_rank_summary(
+        lambda metric: get_best_rank_including_site(
+            solution.solution_df,
+            selected_site,
+            metric,
+            ascending=RANK_METRIC_ASCENDING[metric],
+        )
+    )
+
     tab_1, tab_2, tab_3, tab_4 = st.tabs(
         [
             "Solution Comparison",
@@ -371,6 +304,9 @@ if st.session_state.get("optimise_6_sites_ran"):
                     "max",
                     "proportion_within_coverage_threshold",
                     "inter_tertile_ratio",
+                    "proportion_demand_improved",
+                    "mean_reduction_among_improved",
+                    "demand_beyond_threshold_45",
                 ],
                 format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
@@ -450,6 +386,11 @@ if st.session_state.get("optimise_6_sites_ran"):
             "inter_tertile_ratio",
             "avg_lower_third_bins",
             "avg_upper_third_bins",
+            "demand_improved",
+            "proportion_demand_improved",
+            "mean_reduction_among_improved",
+            "demand_beyond_threshold_45",
+            "demand_beyond_threshold_60",
         ]
         st.dataframe(
             solution_df_display[display_columns],
@@ -485,7 +426,7 @@ if st.session_state.get("optimise_6_sites_ran"):
                 ),
                 "proportion_within_coverage_threshold": st.column_config.NumberColumn(
                     "Coverage (%)",
-                    format="%.1f",
+                    format="percent",
                 ),
                 "inter_tertile_ratio": st.column_config.NumberColumn(
                     "Inter-tertile ratio",
@@ -498,6 +439,26 @@ if st.session_state.get("optimise_6_sites_ran"):
                 "avg_upper_third_bins": st.column_config.NumberColumn(
                     "Average Car Travel (highest third)",
                     format="%.1f",
+                ),
+                "demand_improved": st.column_config.NumberColumn(
+                    "People with a shorter journey",
+                    format="%.0f",
+                ),
+                "proportion_demand_improved": st.column_config.NumberColumn(
+                    "Share with a shorter journey (%)",
+                    format="percent",
+                ),
+                "mean_reduction_among_improved": st.column_config.NumberColumn(
+                    "Avg. minutes saved for those who benefit",
+                    format="%.1f",
+                ),
+                "demand_beyond_threshold_45": st.column_config.NumberColumn(
+                    "Still >45 min away",
+                    format="%.0f",
+                ),
+                "demand_beyond_threshold_60": st.column_config.NumberColumn(
+                    "Still >60 min away",
+                    format="%.0f",
                 ),
             },
         )

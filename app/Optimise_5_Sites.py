@@ -8,10 +8,12 @@ from app.utils import (
     metric_spreads,
     objective_champions,
     compromise_options,
+    get_solution_rank,
+    render_objective_champions,
+    render_ordinal_rank_summary,
 )
 import time
 from PIL import Image
-import pandas as pd
 import pickle
 
 st.set_page_config(initial_sidebar_state="expanded", layout="wide")
@@ -126,44 +128,6 @@ if st.session_state.get("optimise_5_sites_ran"):
         lambda x: [i for i in x if i not in existing_sites][0]
     )
 
-    def ordinal(n: int) -> str:
-        """Convert an integer to its ordinal representation."""
-        if 10 <= n % 100 <= 20:
-            suffix = "th"
-        else:
-            suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-        return f"{n}{suffix}"
-
-    def get_solution_rank(
-        solution_df: pd.DataFrame,
-        selected_site: str,
-        metric: str,
-        ascending: bool = False,
-    ) -> int:
-        """
-        Return the 1-based rank of a site for a given metric.
-        """
-        sorted_df = solution_df.sort_values(metric, ascending=ascending).reset_index(
-            drop=True
-        )
-
-        matches = sorted_df.index[sorted_df["site"] == selected_site]
-
-        if len(matches) == 0:
-            raise ValueError(f"'{selected_site}' not found in dataframe.")
-
-        return matches[0] + 1
-
-    metric_by_col = {m.column: m for m in PARETO_METRICS}
-
-    def format_metric_value(column: str, value: float) -> str:
-        if column == "proportion_within_coverage_threshold":
-            return f"{value * 100:.1f}% covered within 30 min"
-        m = metric_by_col[column]
-        if m.unit:
-            return f"{value:.1f} {m.unit} ({m.label})"
-        return f"{value:.2f} ({m.label})"
-
     champions = objective_champions(solution_df_ranking, site_col="site")
     spreads = metric_spreads(solution_df_ranking)
     compromises = compromise_options(solution_df_ranking, site_col="site")
@@ -177,71 +141,7 @@ if st.session_state.get("optimise_5_sites_ran"):
         "best answer to a different question."
     )
 
-    badge_counts: dict[str, int] = {}
-    for champ in champions:
-        for badge in champ["badges"]:
-            badge_counts[badge] = badge_counts.get(badge, 0) + 1
-
-    for champ in champions:
-        with st.container(border=True):
-            solo_badges = [b for b in champ["badges"] if badge_counts[b] == 1]
-            joint_badges = [b for b in champ["badges"] if badge_counts[b] > 1]
-            badge_parts = []
-            if solo_badges:
-                badge_parts.append("best for " + ", ".join(solo_badges))
-            if joint_badges:
-                badge_parts.append("joint best for " + ", ".join(joint_badges))
-
-            st.markdown(
-                f":material/location_on: **{champ['site']}** — "
-                + "; ".join(badge_parts)
-            )
-
-            badge_cols = [
-                m.column for m in PARETO_METRICS if m.label in champ["badges"]
-            ]
-            st.caption(
-                " · ".join(
-                    format_metric_value(col, champ["values"][col])
-                    for col in badge_cols
-                )
-            )
-
-            weakest_label, weakest_rank, weakest_n = champ["weakest"]
-            st.caption(
-                f"Gives ground on: {weakest_label} "
-                f"({ordinal(weakest_rank)} of {weakest_n})"
-            )
-
-    if compromises:
-        plural = len(compromises) != 1
-        st.caption(
-            f"{len(compromises)} further combination{'s' if plural else ''} "
-            f"{'are' if plural else 'is'} never beaten across the board, but not "
-            "the best at any single measure either."
-        )
-
-    # Flagged by an outright tie for the best value, not by the raw spread -
-    # spread is in different units per metric (minutes vs a 0-1 proportion vs
-    # a ratio), so a single absolute threshold would flag every proportion-
-    # or ratio-based metric as "flat" regardless of whether it actually
-    # separates the field. A genuine tie for best is scale-independent: it
-    # means the badge doesn't even uniquely distinguish one option.
-    flat_spreads = [
-        (metric_by_col[col].label, s)
-        for col, s in spreads.items()
-        if s["n_tied_at_best"] > 1
-    ]
-    if flat_spreads:
-        flat_bits = "; ".join(
-            f"{label} varies by only {s['spread']:.2f} across all {n_total} options, "
-            f"with {s['n_tied_at_best']} tied for best"
-            for label, s in flat_spreads
-        )
-        st.caption(
-            f"Worth noting: {flat_bits}. A badge on a measure this flat is worth "
-            "less than one on a measure that genuinely separates the field."
-        )
+    render_objective_champions(champions, spreads, compromises, n_total)
 
     champion_sites = {c["site"] for c in champions}
     selected_row = solution_df_ranking[solution_df_ranking["site"] == selected_site].iloc[0]
@@ -270,42 +170,15 @@ if st.session_state.get("optimise_5_sites_ran"):
 
     st.divider()
 
-    weighted = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "weighted_average", ascending=True
-        )
-    )
-    average = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "unweighted_average", ascending=True
-        )
-    )
-    p90 = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "90th_percentile", ascending=True
-        )
-    )
-    maximum = ordinal(
-        get_solution_rank(solution_df_ranking, selected_site, "max", ascending=True)
-    )
-    coverage = ordinal(
-        get_solution_rank(
+    render_ordinal_rank_summary(
+        lambda metric: get_solution_rank(
             solution_df_ranking,
             selected_site,
-            "proportion_within_coverage_threshold",
-            ascending=False,
+            metric,
+            ascending=RANK_METRIC_ASCENDING[metric],
         )
     )
 
-    st.markdown(f"""
-Your solution is the:
-
-- **{weighted}** best in terms of weighted average car travel time.
-- **{average}** best in terms of **un**weighted average car travel time.
-- **{p90}** best in terms of 90th percentile car travel time.
-- **{maximum}** best in terms of maximum car travel time.
-- **{coverage}** best in terms of the demand covered within 30 minutes of a site by car.
-""")
     tab_1, tab_2, tab_3, tab_4 = st.tabs(
         [
             "Solution Comparison",
@@ -328,6 +201,9 @@ Your solution is the:
                     "max",
                     "proportion_within_coverage_threshold",
                     "inter_tertile_ratio",
+                    "proportion_demand_improved",
+                    "mean_reduction_among_improved",
+                    "demand_beyond_threshold_45",
                 ],
                 format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
@@ -339,9 +215,9 @@ Your solution is the:
                 ax = solution.plot_best_combination(
                     solution_rank=1,
                     sort_by=sort_by,
-                    plot_regions_not_meeting_threshold=True
-                    if sort_by == "proportion_within_coverage_threshold"
-                    else False,
+                    plot_regions_not_meeting_threshold=(
+                        sort_by == "proportion_within_coverage_threshold"
+                    ),
                 )
                 st.pyplot(ax.figure)
             with col2:
@@ -353,9 +229,9 @@ Your solution is the:
                         sort_by,
                         ascending=RANK_METRIC_ASCENDING[sort_by],
                     ),
-                    plot_regions_not_meeting_threshold=True
-                    if sort_by == "proportion_within_coverage_threshold"
-                    else False,
+                    plot_regions_not_meeting_threshold=(
+                        sort_by == "proportion_within_coverage_threshold"
+                    ),
                     sort_by=sort_by,
                 )
                 st.pyplot(ax.figure)
@@ -381,6 +257,11 @@ Your solution is the:
             "inter_tertile_ratio",
             "avg_lower_third_bins",
             "avg_upper_third_bins",
+            "demand_improved",
+            "proportion_demand_improved",
+            "mean_reduction_among_improved",
+            "demand_beyond_threshold_45",
+            "demand_beyond_threshold_60",
         ]
         st.dataframe(
             solution_df_display[display_columns],
@@ -416,7 +297,7 @@ Your solution is the:
                 ),
                 "proportion_within_coverage_threshold": st.column_config.NumberColumn(
                     "Coverage (%)",
-                    format="%.1f",
+                    format="percent",
                 ),
                 "inter_tertile_ratio": st.column_config.NumberColumn(
                     "Inter-tertile ratio",
@@ -429,6 +310,26 @@ Your solution is the:
                 "avg_upper_third_bins": st.column_config.NumberColumn(
                     "Average Car Travel (highest third)",
                     format="%.1f",
+                ),
+                "demand_improved": st.column_config.NumberColumn(
+                    "People with a shorter journey",
+                    format="%.0f",
+                ),
+                "proportion_demand_improved": st.column_config.NumberColumn(
+                    "Share with a shorter journey (%)",
+                    format="percent",
+                ),
+                "mean_reduction_among_improved": st.column_config.NumberColumn(
+                    "Avg. minutes saved for those who benefit",
+                    format="%.1f",
+                ),
+                "demand_beyond_threshold_45": st.column_config.NumberColumn(
+                    "Still >45 min away",
+                    format="%.0f",
+                ),
+                "demand_beyond_threshold_60": st.column_config.NumberColumn(
+                    "Still >60 min away",
+                    format="%.0f",
                 ),
             },
         )
