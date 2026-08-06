@@ -3,6 +3,7 @@ from app.utils import (
     page_styling,
     load_devon_sites,
     best_combination_title,
+    shared_map_bbox,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
     PARETO_METRICS,
@@ -240,23 +241,36 @@ if st.session_state.get("optimise_5_sites_ran"):
                 )
                 return ax
 
+            # Both figures are built before either is rendered, so they can
+            # be cropped to a single shared box and come out the same size -
+            # see shared_map_bbox().
+            fig_best = plot_with_title(1).figure
+            fig_yours = plot_with_title(
+                get_solution_rank(
+                    solution_df_ranking,
+                    selected_site,
+                    sort_by,
+                    ascending=RANK_METRIC_ASCENDING[sort_by],
+                )
+            ).figure
+            map_bbox = shared_map_bbox(fig_best, fig_yours)
+
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
-                st.pyplot(plot_with_title(1).figure)
+                # The heading sits in a keyed container so style.css can hold
+                # both columns' headings to the same height - the left one
+                # wraps to two lines for the longer metric names and the
+                # right one doesn't, which knocked the maps out of step.
+                with st.container(key="map_panel_heading_best"):
+                    st.subheader(
+                        f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}"
+                    )
+                st.pyplot(fig_best, bbox_inches=map_bbox)
             with col2:
-                st.subheader("Your Selected Solution")
-                st.pyplot(
-                    plot_with_title(
-                        get_solution_rank(
-                            solution_df_ranking,
-                            selected_site,
-                            sort_by,
-                            ascending=RANK_METRIC_ASCENDING[sort_by],
-                        )
-                    ).figure
-                )
+                with st.container(key="map_panel_heading_yours"):
+                    st.subheader("Your Selected Solution")
+                st.pyplot(fig_yours, bbox_inches=map_bbox)
 
         plot_best_sols()
 

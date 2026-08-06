@@ -5,6 +5,7 @@ from app.utils import (
     load_devon_sites,
     write_terminal_html,
     best_combination_title,
+    shared_map_bbox,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
     PARETO_METRICS,
@@ -363,14 +364,30 @@ if st.session_state.get("optimise_6_sites_ran"):
                 )
                 return ax
 
+            # Both figures are built before either is rendered, so they can
+            # be cropped to a single shared box and come out the same size -
+            # see shared_map_bbox().
+            fig_best = plot_with_title(1).figure
+            fig_yours = plot_with_title(comparison_rank).figure
+            map_bbox = shared_map_bbox(fig_best, fig_yours)
+
             col1, col2 = st.columns(2)
 
             with col1:
-                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
-                st.pyplot(plot_with_title(1).figure)
+                # The heading sits in a keyed container so style.css can hold
+                # both columns' headings to the same height - either can wrap
+                # to two lines (a long metric name on the left, a long site
+                # name on the right) while the other doesn't, which knocked
+                # the maps out of step.
+                with st.container(key="map_panel_heading_best"):
+                    st.subheader(
+                        f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}"
+                    )
+                st.pyplot(fig_best, bbox_inches=map_bbox)
             with col2:
-                st.subheader(f"Best Solution Still Including {selected_site}")
-                st.pyplot(plot_with_title(comparison_rank).figure)
+                with st.container(key="map_panel_heading_yours"):
+                    st.subheader(f"Best Solution Still Including {selected_site}")
+                st.pyplot(fig_yours, bbox_inches=map_bbox)
 
             sort_by_label = RANK_METRIC_LABELS[sort_by]
 

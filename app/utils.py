@@ -12,6 +12,7 @@ from pathlib import Path
 import os
 from lokigi.site import SiteProblem
 from lokigi.multiobjective import Metric
+from matplotlib.transforms import Bbox
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
@@ -444,6 +445,28 @@ def best_combination_title(
         lines.append(f"{n_unreachable} {region_word} unreachable")
 
     return "\n".join(lines)
+
+
+def shared_map_bbox(*figures):
+    """
+    One savefig `bbox_inches` box that fits every figure passed in, for
+    rendering maps side by side in equal-width columns.
+
+    st.pyplot saves with bbox_inches="tight", which crops each figure to its
+    own content - so two maps whose titles differ in length (they always do:
+    one names the site the optimiser picked, the other the user's) come out
+    as images of different widths. Streamlit then scales each to its column
+    width, and the wider image renders shorter, leaving the two maps
+    different sizes and vertically out of step. Cropping both to the union
+    of their tight boxes makes the saved images pixel-identical in size, so
+    they scale to the same height and line up.
+
+    Pass the result to every one of those figures:
+    `st.pyplot(fig, bbox_inches=shared_map_bbox(fig_a, fig_b))`.
+    """
+    return Bbox.union(
+        [fig.get_tightbbox(fig.canvas.get_renderer()) for fig in figures]
+    )
 
 
 def render_objective_champions(
