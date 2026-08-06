@@ -173,6 +173,13 @@ PARETO_METRICS = [
         column="inter_tertile_ratio",
         direction="lower_better",
         label="equity (inter-tertile ratio)",
+        # 2dp, not Metric's default 1dp: the whole ratio sits in a narrow
+        # band around parity (0.83-1.06 across the 6-site combinations), so
+        # at 1dp most options collapse onto "0.9" or "1.0" and a card can
+        # claim a site is 12th of 14 on a measure reading exactly what the
+        # winner reads. Matches the 2dp used in the Solution Breakdown table
+        # and the map titles.
+        decimals=2,
     ),
     Metric(
         column="avg_lower_third_bins",
@@ -228,7 +235,9 @@ def objective_champions(
     - "site": the site name (or joined site names for multi-site solutions)
     - "badges": list of metric labels this site is (jointly) best on
     - "values": {column: raw value} for every metric, for display
-    - "weakest": (label, rank, n) for the metric this site ranks worst on
+    - "weakest": (label, rank, n, column) for the metric this site ranks
+      worst on - the column is carried so the caller can pull that metric's
+      own value out of "values" and render it in the metric's units
 
     Ordered by number of badges (most first), then by weighted_average, so
     the strongest all-rounder leads and ties resolve deterministically.
@@ -271,7 +280,12 @@ def objective_champions(
         row_ranks = ranks.loc[row_idx]
         weakest_col = row_ranks.idxmax()
         weakest_label = next(m.label for m in metrics if m.column == weakest_col)
-        entry["weakest"] = (weakest_label, int(row_ranks[weakest_col]), n_total)
+        entry["weakest"] = (
+            weakest_label,
+            int(row_ranks[weakest_col]),
+            n_total,
+            weakest_col,
+        )
         assert bool(entry["_row"].get("is_pareto_optimal", True)), (
             f"Champion '{site}' is not Pareto-optimal - unexpected unless "
             "every metric is tied across the whole solution set."
@@ -454,10 +468,17 @@ def render_objective_champions(
                 )
             )
 
-            weakest_label, weakest_rank, weakest_n = champ["weakest"]
+            # The value, not just the rank: "3rd of 14" says where this site
+            # sits in the field but nothing about how much is actually being
+            # given up - 3rd of 14 could be a hair behind the leader or half
+            # the benefit. Formatted by the metric itself, so it matches the
+            # badge values directly above it (percentage, minutes or ratio).
+            weakest_label, weakest_rank, weakest_n, weakest_col = champ["weakest"]
+            weakest_metric = metric_by_col[weakest_col]
+            weakest_value = weakest_metric.format_value(champ["values"][weakest_col])
             st.caption(
                 f"Gives ground on: {weakest_label} "
-                f"({ordinal(weakest_rank)} of {weakest_n})"
+                f"({ordinal(weakest_rank)} of {weakest_n}, {weakest_value})"
             )
 
     if compromises:
