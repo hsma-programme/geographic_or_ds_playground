@@ -48,6 +48,7 @@ DEPRIVATION = Investigation(
     recommended_next=[
         "demand",
         "travel_car",
+        "left_behind",
     ],
     analyst_prompt=("Show me areas experiencing the highest deprivation."),
     is_entry_point=True,
@@ -62,7 +63,7 @@ TRAVEL_CAR = Investigation(
     category=["accessibility"],
     prerequisites=[],
     parent=None,
-    recommended_next=["travel_pt", "demand"],
+    recommended_next=["travel_pt", "demand", "left_behind"],
     analyst_prompt=("Show me travel times to existing CDCs by car."),
     is_entry_point=True,
     analyst_days=3,
@@ -220,6 +221,32 @@ PROJECTED_DEMAND = Investigation(
     icon="show_chart",
 )
 
+# Every other analysis colours a map; none of them puts a number of people on
+# the problem, or shows the access gradient across deprivation bands. This is
+# the missing "how bad is today, exactly?" status-quo page - deliberately
+# gated on travel_car only (not travel_pt too), so it isn't locked behind the
+# 5-day PT briefing.
+LEFT_BEHIND = Investigation(
+    id="left_behind",
+    title="Who is left behind today?",
+    page="app/Left_Behind.py",
+    category=["accessibility", "equity"],
+    prerequisites=["travel_car"],
+    parent="travel_car",
+    recommended_next=[
+        "hotspots_deprivation_travel",
+        "2sfca_car",
+        "utilisation",
+    ],
+    analyst_prompt=(
+        "Tell me exactly how many people can't reach a CDC within a "
+        "reasonable time today, and whether that falls unevenly by deprivation."
+    ),
+    is_entry_point=False,
+    analyst_days=1,
+    icon="person_off",
+)
+
 # At the bottom of investigations.py
 
 ALL_INVESTIGATIONS: dict[str, Investigation] = {
@@ -236,5 +263,6 @@ ALL_INVESTIGATIONS: dict[str, Investigation] = {
         TWO_SFCA_PT,
         UTILISATION,
         PROJECTED_DEMAND,
+        LEFT_BEHIND,
     ]
 }

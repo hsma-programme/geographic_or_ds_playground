@@ -859,6 +859,21 @@ def render_travel_maps(best_solution_gdf):
         )
 
 
+def render_left_behind_map(best_solution_gdf):
+    """The Left Behind page's map: a 45/60 radio rather than the free 15-60
+    slider in render_travel_maps() above, so this page reads as its own
+    analysis rather than a replay of the Travel by Car page."""
+    threshold = st.radio(
+        "Show areas more than...",
+        [45, 60],
+        format_func=lambda t: f"{t} minutes from any CDC",
+        horizontal=True,
+    )
+    return render_travel_existing_map(
+        best_solution_gdf, what="threshold", threshold=threshold
+    )
+
+
 ###########################
 # MARK: Hotspots (shared)
 ###########################

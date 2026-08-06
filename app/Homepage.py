@@ -22,17 +22,15 @@ cola, colb = st.columns([0.7, 0.3])
 intro_text = f"""
 > You are a senior manager who has been given funding for an additional community diagnostic centre (CDC) in Devon.
 <br><br>
-> You have been told to improve access for those between 50 and 85.
+> You have been told to improve access for those between 50 and 85, particularly for those from more deprived areas.
 <br><br>
 > People may only use CDCs within Devon. They cannot cross the Devon border to access a different CDC.
 <br><br>
 > You have been assigned a rather junior analyst who can provide information, but can only follow very specific instructions.
 <br><br>
-> Due to capacity constraints, your analyst can provide you with a maximum of {num2words(MAXIMUM_BRIEFINGS)} briefings on areas of your choosing.
+> Due to capacity constraints, your analyst can provide you with a maximum of {num2words(MAXIMUM_BRIEFINGS)} briefings on areas of your choosing. The frazzled-looking data team lead has assured you it will be plenty.
 <br><br>
 > Some of these will take your analyst an afternoon; others the better part of a fortnight. The briefing count does not know the difference - much like most budgets don't.
-<br><br>
-> The frazzled-looking data team lead has assured you it will be plenty.
 <br><br>
 > What is your first request to your data analyst?
 """

@@ -2,6 +2,7 @@ import streamlit as st
 from app.utils import (
     page_styling,
     load_devon_sites,
+    best_combination_title,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
     PARETO_METRICS,
@@ -208,33 +209,54 @@ if st.session_state.get("optimise_5_sites_ran"):
                 format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
             )
+            plot_threshold = sort_by == "proportion_within_coverage_threshold"
+
+            # lokigi's own default title reports whichever metric solve() was
+            # told to rank on - frozen into the pickle, so it named
+            # "proportion demand improved" (as a raw 0-1 proportion) whatever
+            # this radio was set to. title=None + our own set_title() puts the
+            # metric the user actually picked, in its own units, on the map.
+            def plot_with_title(solution_rank):
+                ax = solution.plot_best_combination(
+                    solution_rank=solution_rank,
+                    sort_by=sort_by,
+                    plot_regions_not_meeting_threshold=plot_threshold,
+                    title=None,
+                )
+                # The row lokigi itself selected for this rank, via its own
+                # public accessor - so the numbers in the title always belong
+                # to the map beside them.
+                plotted_row = solution.return_best_combination_details(
+                    sort_by=sort_by, top_n=solution_rank
+                ).iloc[solution_rank - 1]
+                ax.set_title(
+                    best_combination_title(
+                        plotted_row,
+                        sort_by,
+                        n_sites=solution.n_sites,
+                        solution_rank=solution_rank,
+                    ),
+                    fontsize=12,
+                )
+                return ax
+
             col1, col2 = st.columns(2)
 
             with col1:
                 st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
-                ax = solution.plot_best_combination(
-                    solution_rank=1,
-                    sort_by=sort_by,
-                    plot_regions_not_meeting_threshold=(
-                        sort_by == "proportion_within_coverage_threshold"
-                    ),
-                )
-                st.pyplot(ax.figure)
+                st.pyplot(plot_with_title(1).figure)
             with col2:
                 st.subheader("Your Selected Solution")
-                ax = solution.plot_best_combination(
-                    solution_rank=get_solution_rank(
-                        solution_df_ranking,
-                        selected_site,
-                        sort_by,
-                        ascending=RANK_METRIC_ASCENDING[sort_by],
-                    ),
-                    plot_regions_not_meeting_threshold=(
-                        sort_by == "proportion_within_coverage_threshold"
-                    ),
-                    sort_by=sort_by,
+                st.pyplot(
+                    plot_with_title(
+                        get_solution_rank(
+                            solution_df_ranking,
+                            selected_site,
+                            sort_by,
+                            ascending=RANK_METRIC_ASCENDING[sort_by],
+                        )
+                    ).figure
                 )
-                st.pyplot(ax.figure)
 
         plot_best_sols()
 

@@ -34,7 +34,7 @@ if not st.session_state.site_submitted_demand:
         intro_text,
         output_path="app/assets/terminal_working/demand.html",
     )
-    st.iframe(Path("app/assets/terminal_working/demand.html"), height=300)
+    st.iframe(Path("app/assets/terminal_working/demand.html"), height=350)
     render_prior_choice_recap(DEMAND)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")

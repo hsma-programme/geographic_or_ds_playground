@@ -96,6 +96,14 @@ pages = [
             title="Where do high demand and high travel times intersect?",
             visibility="hidden",
         ),
+        # Puts a headcount on today's access gap, and shows it by deprivation
+        # band - the status-quo page every other analysis colours a map of
+        # but never counts.
+        st.Page(
+            "app/Left_Behind.py",
+            title="Who is left behind today?",
+            visibility="hidden",
+        ),
         # 2 step floating catchment area pages: fuse capacity, demand and travel
         # into a single accessibility score. They depend on the utilisation page's
         # capacity figures (see prerequisites in app/utils_investigations.py).

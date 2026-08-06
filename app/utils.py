@@ -65,6 +65,47 @@ RANK_METRIC_LABELS = {
     "demand_beyond_threshold_45": "people still more than 45 minutes away",
 }
 
+# How each "rank on" metric's own value should read in a plot title, keyed by
+# the same columns as RANK_METRIC_LABELS above. Each formatter takes one row
+# of solution_df and returns just the value part of the line.
+#
+# These exist because lokigi's default plot title can't report the metric the
+# Optimise pages' radio actually selected: it reports SiteSolutionSet.
+# ranking_metric, the Metric frozen into the pickle by solve(rank_on=...), so
+# every title read "Ranked on Proportion demand improved: 0.1" no matter what
+# the user picked - a raw 0-1 proportion at 1dp, for a metric they hadn't
+# chosen. See best_combination_title() below.
+#
+# Plain formatters rather than more lokigi Metric objects (as in
+# PARETO_METRICS) because Metric.format_value() renders a headcount as
+# "49306" - no thousands separator, which is exactly what makes a
+# population number hard to read at a glance.
+#
+# Proportions carry their absolute headcount alongside them: "10.0%" of Devon
+# is a number nobody can act on until it's also "52,140 people".
+RANK_METRIC_TITLE_VALUE = {
+    "weighted_average": lambda row: f"{row['weighted_average']:.1f} minutes",
+    "unweighted_average": lambda row: f"{row['unweighted_average']:.1f} minutes",
+    "90th_percentile": lambda row: f"{row['90th_percentile']:.1f} minutes",
+    "max": lambda row: f"{row['max']:.1f} minutes",
+    "proportion_within_coverage_threshold": lambda row: (
+        f"{row['proportion_within_coverage_threshold']:.1%} "
+        f"({row['demand_within_coverage_threshold']:,.0f} people)"
+    ),
+    "inter_tertile_ratio": lambda row: f"{row['inter_tertile_ratio']:.2f}",
+    "proportion_demand_improved": lambda row: (
+        f"{row['proportion_demand_improved']:.1%} "
+        f"({row['demand_improved']:,.0f} people)"
+    ),
+    "mean_reduction_among_improved": lambda row: (
+        f"{row['mean_reduction_among_improved']:.1f} minutes"
+    ),
+    "demand_beyond_threshold_45": lambda row: (
+        f"{row['demand_beyond_threshold_45']:,.0f} people"
+    ),
+}
+
+
 # Columns summarised in the "your solution is the Nth best..." bullet list on
 # each Optimise page. A deliberate subset of RANK_METRIC_LABELS - narrower
 # than the tab-1 "rank on" radio (which also offers inter_tertile_ratio and
@@ -279,10 +320,18 @@ def get_solution_rank(
 ) -> int:
     """
     Return the 1-based rank of a site for a given metric.
+
+    kind="mergesort" (stable) because this rank is handed straight back to
+    lokigi as `plot_best_combination(solution_rank=...)`, which sorts with
+    mergesort internally. Ties are routine here - `max` takes only 2 distinct
+    values across the 14 five-site combinations - and pandas' default
+    quicksort is not stable, so the two orderings disagreed within a tie
+    group and the "your selected solution" panel plotted a different site
+    than the heading above it named.
     """
-    sorted_df = solution_df.sort_values(metric, ascending=ascending).reset_index(
-        drop=True
-    )
+    sorted_df = solution_df.sort_values(
+        metric, ascending=ascending, kind="mergesort"
+    ).reset_index(drop=True)
 
     matches = sorted_df.index[sorted_df["site"] == selected_site]
 
@@ -300,6 +349,65 @@ def format_metric_value(metric: Metric, value: float) -> str:
     render a percentage vs. a unit vs. a bare ratio.
     """
     return f"{metric.format_value(value)} ({metric.label})"
+
+
+def best_combination_title(
+    solution_row: pd.Series,
+    sort_by: str,
+    n_sites: int,
+    solution_rank: int = 1,
+) -> str:
+    """
+    Build the title for one of the side-by-side maps on the Optimise pages,
+    replacing lokigi's default (which names whichever metric solve() ranked
+    on, not the one the page's "Rank On..." radio is currently set to).
+
+    `solution_row` must be the row lokigi actually plotted - fetch it with
+    SiteSolutionSet.return_best_combination_details(sort_by=..., top_n=rank)
+    so it goes through lokigi's own ordering rather than a second sort here.
+
+    Reads e.g.:
+
+        3rd best solution for 5 sites
+        Ranked on people with a meaningfully shorter journey: 10.0% (52,140 people)
+        Weighted Average: 22.1 minutes
+        Maximum: 61.2 minutes
+    """
+    if solution_rank == 1:
+        prefix = f"Best solution for {n_sites} sites"
+    else:
+        prefix = f"{ordinal(solution_rank)} best solution for {n_sites} sites"
+
+    ranked_on = (
+        f"Ranked on {RANK_METRIC_LABELS[sort_by]}: "
+        f"{RANK_METRIC_TITLE_VALUE[sort_by](solution_row)}"
+    )
+
+    lines = [prefix, ranked_on]
+
+    # The two context lines lokigi shows for a p-median objective, kept so
+    # both panels stay comparable on the standard measures - minus whichever
+    # one the ranked-on line has already just reported, so the same number
+    # never appears twice in consecutive lines.
+    if sort_by != "weighted_average":
+        lines.append(
+            f"Weighted Average: {solution_row['weighted_average']:.1f} minutes"
+        )
+    if sort_by != "max":
+        lines.append(f"Maximum: {solution_row['max']:.1f} minutes")
+
+    # Mirrors lokigi's own _unreachable_metrics_fragment: the travel-time
+    # metrics above are computed over reachable demand only, so a demand
+    # location with no feasible journey would otherwise vanish from the
+    # summary with nothing to say it had been excluded. 0 across every row of
+    # both current solution pickles - kept so a regenerated solve that does
+    # have unreachable regions can't silently lose the caveat.
+    n_unreachable = int(solution_row["regions_unreachable"])
+    if n_unreachable:
+        region_word = "region" if n_unreachable == 1 else "regions"
+        lines.append(f"{n_unreachable} {region_word} unreachable")
+
+    return "\n".join(lines)
 
 
 def render_objective_champions(
@@ -411,6 +519,7 @@ SITE_SELECTION_SUBMITTABLE = [
     "demand_deprivation_hotspots",
     "demand_travel_hotspots",
     "deprivation_travel_hotspots",
+    "left_behind",
     "final",
 ]
 
@@ -430,6 +539,7 @@ SITE_SELECTION_LABELS = {
     "demand_deprivation_hotspots": "demand & deprivation hotspots",
     "demand_travel_hotspots": "demand & travel hotspots",
     "deprivation_travel_hotspots": "deprivation & travel hotspots",
+    "left_behind": "who's left behind today",
     "final": "your final decision",
 }
 
@@ -450,6 +560,7 @@ INVESTIGATION_ID_TO_SITE_KEY = {
     "2sfca_pt": "2sfca_pt",
     "utilisation": "utilisation",
     "projected_demand": "projected_demand",
+    "left_behind": "left_behind",
 }
 
 
@@ -518,6 +629,24 @@ def load_deprivation():
 @st.cache_data
 def load_demand():
     return pd.read_csv("data/demand_MF_50_84.csv")
+
+
+@st.cache_data
+def demand_by_equity_band() -> dict[int, float]:
+    """Total 50-84 population in each IMD decile (1 = most deprived).
+
+    Used to normalise the raw headcounts in a solution_df's
+    *_by_equity_group columns into shares of each band's own population -
+    a raw headcount makes the biggest band look worst regardless of how
+    deprived it actually is.
+    """
+    merged = load_demand().merge(
+        load_deprivation(), left_on="LSOA 2021 Name", right_on="LSOA name (2021)"
+    )
+    totals = merged.groupby(
+        "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
+    )["MF50-84"].sum()
+    return totals.to_dict()
 
 
 @st.cache_data
@@ -1342,6 +1471,18 @@ def setup_lokigi_site_problem_car():
     )
 
     return lokigi_site_problem
+
+
+@st.cache_resource
+def evaluate_car_baseline():
+    """Today's network (the 4 existing CDCs) evaluated on its own - no
+    candidate site involved - for the Left Behind page. evaluate_baseline()
+    defaults to the sites flagged via required_sites_col in
+    setup_lokigi_site_problem_car(), i.e. exactly the existing network."""
+    return setup_lokigi_site_problem_car().evaluate_baseline(
+        threshold_for_coverage=COVERAGE_THRESHOLD_MINUTES,
+        beyond_thresholds=LEFT_BEHIND_THRESHOLDS,
+    )
 
 
 @st.cache_resource

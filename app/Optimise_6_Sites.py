@@ -4,6 +4,7 @@ from app.utils import (
     page_styling,
     load_devon_sites,
     write_terminal_html,
+    best_combination_title,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
     PARETO_METRICS,
@@ -231,10 +232,16 @@ if st.session_state.get("optimise_6_sites_ran"):
         ascending: bool = False,
     ) -> int:
         """Return the 1-based rank (best-first, by ``metric``) of the best
-        two-site combination that still includes ``selected_site``."""
-        sorted_df = solution_df.sort_values(metric, ascending=ascending).reset_index(
-            drop=True
-        )
+        two-site combination that still includes ``selected_site``.
+
+        kind="mergesort" (stable) to match lokigi's own internal ordering -
+        see the note on app.utils.get_solution_rank; this rank is handed
+        straight back to plot_best_combination(solution_rank=...), so an
+        unstable sort can point at a different row within a tie group than
+        the one lokigi then plots."""
+        sorted_df = solution_df.sort_values(
+            metric, ascending=ascending, kind="mergesort"
+        ).reset_index(drop=True)
 
         matches = sorted_df.index[
             sorted_df["site_names"].apply(lambda names: selected_site in names)
@@ -255,10 +262,11 @@ if st.session_state.get("optimise_6_sites_ran"):
 
     def naive_top_two_pair(metric: str, ascending: bool) -> set[str]:
         """The pair you'd get by just taking the two best-ranked *individual*
-        sites from the single-site page, for the given metric."""
-        ranked = solution_5_df.sort_values(metric, ascending=ascending).reset_index(
-            drop=True
-        )
+        sites from the single-site page, for the given metric. Stable sort so
+        this names the same two sites that page itself showed."""
+        ranked = solution_5_df.sort_values(
+            metric, ascending=ascending, kind="mergesort"
+        ).reset_index(drop=True)
         return {ranked.iloc[0]["site"], ranked.iloc[1]["site"]}
 
     def true_best_pair(metric: str, ascending: bool) -> set[str]:
@@ -266,9 +274,12 @@ if st.session_state.get("optimise_6_sites_ran"):
         full-precision solution_df, not the rounded display copy - rounding to
         2dp can create ties (e.g. several combinations rounding to the same
         coverage percentage) that a sort then resolves inconsistently, which
-        can silently pick the wrong "best" row."""
+        can silently pick the wrong "best" row. kind="mergesort" for the same
+        reason, one level down: genuine ties still exist at full precision,
+        and this pair is compared against the one drawn in the left-hand
+        panel, which lokigi picks with a stable sort."""
         ranked = solution.solution_df.sort_values(
-            metric, ascending=ascending
+            metric, ascending=ascending, kind="mergesort"
         ).reset_index(drop=True)
         return {i for i in ranked.iloc[0]["site_names"] if i not in existing_sites}
 
@@ -323,24 +334,43 @@ if st.session_state.get("optimise_6_sites_ran"):
                 solution.solution_df, selected_site, sort_by, ascending=ascending
             )
 
+            # lokigi's own default title reports whichever metric solve() was
+            # told to rank on - frozen into the pickle, so it named
+            # "proportion demand improved" (as a raw 0-1 proportion) whatever
+            # this radio was set to. title=None + our own set_title() puts the
+            # metric the user actually picked, in its own units, on the map.
+            def plot_with_title(solution_rank):
+                ax = solution.plot_best_combination(
+                    solution_rank=solution_rank,
+                    sort_by=sort_by,
+                    plot_regions_not_meeting_threshold=plot_threshold,
+                    title=None,
+                )
+                # The row lokigi itself selected for this rank, via its own
+                # public accessor - so the numbers in the title always belong
+                # to the map beside them.
+                plotted_row = solution.return_best_combination_details(
+                    sort_by=sort_by, top_n=solution_rank
+                ).iloc[solution_rank - 1]
+                ax.set_title(
+                    best_combination_title(
+                        plotted_row,
+                        sort_by,
+                        n_sites=solution.n_sites,
+                        solution_rank=solution_rank,
+                    ),
+                    fontsize=12,
+                )
+                return ax
+
             col1, col2 = st.columns(2)
 
             with col1:
                 st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
-                ax = solution.plot_best_combination(
-                    solution_rank=1,
-                    sort_by=sort_by,
-                    plot_regions_not_meeting_threshold=plot_threshold,
-                )
-                st.pyplot(ax.figure)
+                st.pyplot(plot_with_title(1).figure)
             with col2:
                 st.subheader(f"Best Solution Still Including {selected_site}")
-                ax = solution.plot_best_combination(
-                    solution_rank=comparison_rank,
-                    sort_by=sort_by,
-                    plot_regions_not_meeting_threshold=plot_threshold,
-                )
-                st.pyplot(ax.figure)
+                st.pyplot(plot_with_title(comparison_rank).figure)
 
             sort_by_label = RANK_METRIC_LABELS[sort_by]
 
