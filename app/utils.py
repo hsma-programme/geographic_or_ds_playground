@@ -392,12 +392,34 @@ def best_combination_title(
     else:
         prefix = f"{ordinal(solution_rank)} best solution for {n_sites} sites"
 
+    # Name the sites this combination actually adds. "Best solution for 5
+    # sites" is true of every panel on the page - what distinguishes one
+    # combination from another is the one (or two) new sites on top of the
+    # existing network, and the map only says so via a pin label the reader
+    # has to hunt for among the required sites' labels.
+    #
+    # additional_site_names is lokigi's own list of the non-required sites in
+    # the combination, so this stays correct without the page having to pass
+    # in which sites are existing.
+    # One added site goes inline; two or more get a line each. Facility names
+    # here run to 40-odd characters ("Okehampton - Exeter Road Industrial
+    # Estate"), so "adds A and B" on one line makes the title wider than the
+    # map under it - and since st.pyplot scales the saved figure to its
+    # column width, a wider title means a visibly smaller map in each of the
+    # two side-by-side columns.
+    added = list(solution_row.get("additional_site_names", []) or [])
+    added_lines = []
+    if len(added) == 1:
+        prefix = f"{prefix}: adds {added[0]}"
+    elif added:
+        added_lines = [f"adds {added[0]}"] + [f"and {name}" for name in added[1:]]
+
     ranked_on = (
         f"Ranked on {RANK_METRIC_LABELS[sort_by]}: "
         f"{RANK_METRIC_TITLE_VALUE[sort_by](solution_row)}"
     )
 
-    lines = [prefix, ranked_on]
+    lines = [prefix, *added_lines, ranked_on]
 
     # The two context lines lokigi shows for a p-median objective, kept so
     # both panels stay comparable on the standard measures - minus whichever
