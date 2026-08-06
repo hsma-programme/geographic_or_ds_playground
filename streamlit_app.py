@@ -154,6 +154,11 @@ pages = [
             title="A new challenger appears!",
             visibility="hidden",
         ),
+        st.Page(
+            "app/Debrief.py",
+            title="Debrief",
+            visibility="hidden",
+        ),
 ]
 
 pg = st.navigation(pages)

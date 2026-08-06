@@ -503,3 +503,12 @@ if st.session_state.get("optimise_6_sites_ran"):
             "ground, ranked against every combination the optimiser evaluated."
         )
         st.pyplot(solution.plot_pareto_facets())
+
+    st.divider()
+    if st.button(
+        "Wrap up",
+        key="btn_continue_debrief",
+        icon=":material/summarize:",
+        width="stretch",
+    ):
+        st.switch_page("app/Debrief.py")
