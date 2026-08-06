@@ -368,11 +368,10 @@ if st.session_state.get("optimise_5_sites_ran"):
         st.pyplot(solution.plot_pareto_facets())
 
     st.divider()
-    st.subheader("But wait...")
     if st.button(
-        "Yet another person runs into the room...",
-        key="btn_continue_optimise_6",
-        icon=":material/celebration:",
+        "See who actually benefits",
+        key="btn_continue_who_benefits",
+        icon=":material/query_stats:",
         width="stretch",
     ):
-        st.switch_page("app/Optimise_6_Sites.py")
+        st.switch_page("app/Who_Benefits.py")

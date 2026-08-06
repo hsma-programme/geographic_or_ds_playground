@@ -137,6 +137,13 @@ pages = [
             title="What does the maths say? (one new site)",
             visibility="hidden",
         ),
+        # A reveal page, not an evidence-pool one - reached only via the
+        # button at the bottom of Optimise_5_Sites.py, no investigation tile.
+        st.Page(
+            "app/Who_Benefits.py",
+            title="Who actually benefits?",
+            visibility="hidden",
+        ),
         st.Page(
             "app/Optimise_6_Sites.py",
             title="What does the maths say? (two new sites)",
