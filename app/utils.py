@@ -171,11 +171,11 @@ ORDINAL_RANK_SUMMARY_METRICS = [
 #
 # mean_reduction_among_improved (minutes saved for those who benefit) is
 # deliberately left OUT of this Pareto set, though it's still offered on the
-# tab-1 radio and shown in the results table. Including it pushed the
-# defensible shortlist from 5/14 to 9/14 on the 5-site solution (24/91 on
-# the 6-site one) - too large a fraction of the field to read as a punchy
-# "these are the contenders" shortlist. Dropping it restores a tighter
-# 4/14 and 5/91 (verified against the regenerated pickles).
+# tab-1 radio and shown in the results table. Including it pushes the
+# defensible shortlist to 9/14 on the 5-site solution and 24/91 on the
+# 6-site one - too large a fraction of the field to read as a punchy "these
+# are the contenders" shortlist. Dropping it gives a tighter 3/14 and 4/91
+# (re-verified against the pickles regenerated under lokigi 0.9.1).
 #
 # inter_tertile_ratio is deliberately scored "lower is better", not "closest
 # to 1.0" - this is a stance, not just a modelling default. It rewards
@@ -183,7 +183,8 @@ ORDINAL_RANK_SUMMARY_METRICS = [
 # least deprived (progressive universalism), rather than treating perfect
 # evenness as the ideal. Scoring it against a target of 1.0 instead would
 # both change which options make the shortlist and loosen the Pareto front
-# considerably (verified: 9/14 vs 4/14 on the 5-site solution).
+# considerably (verified under 0.9.1: 8/14 vs 3/14 on the 5-site solution,
+# 26/91 vs 4/91 on the 6-site one).
 PARETO_METRICS = [
     Metric(
         column="weighted_average",
@@ -202,8 +203,8 @@ PARETO_METRICS = [
         direction="lower_better",
         label="equity (inter-tertile ratio)",
         # 2dp, not Metric's default 1dp: the whole ratio sits in a narrow
-        # band around parity (0.83-1.06 across the 6-site combinations), so
-        # at 1dp most options collapse onto "0.9" or "1.0" and a card can
+        # band (0.69-0.89 across the 6-site combinations), so at 1dp most
+        # options collapse onto "0.7" or "0.8" and a card can
         # claim a site is 12th of 14 on a measure reading exactly what the
         # winner reads. Matches the 2dp used in the Solution Breakdown table
         # and the map titles.
@@ -509,8 +510,9 @@ RANK_METRIC_PANEL_CAPTION = {
     "inter_tertile_ratio": (
         "Average travel time for each deprivation decile, most deprived first, "
         "weighted by population. The dashed lines are the two numbers the ratio "
-        "divides: the **most deprived third** (deciles 1-4) over the **least "
-        "deprived third** (deciles 8-10). Below 1 means the most deprived travel "
+        "divides: the **most deprived third** (deciles 1-3) over the **least "
+        "deprived third** (deciles 8-10), with the middle deliberately ignored. "
+        "Below 1 means the most deprived travel "
         "less far on average. The shape across the bars matters as much as the "
         "ratio - deprivation isn't geographically tidy, so no map can show you this."
     ),
@@ -536,110 +538,10 @@ LEFT_BEHIND_WITHIN_COLOUR = "#67a9cf"
 
 # Colours for the equity panel's bars: the most-deprived third, the middle,
 # and the least-deprived third. The two ends are what the inter-tertile ratio
-# actually divides, so they carry colour and the middle stays neutral.
-EQUITY_MOST_DEPRIVED_COLOUR = "#c2603f"
-EQUITY_MIDDLE_COLOUR = "#c9c9c9"
-EQUITY_LEAST_DEPRIVED_COLOUR = "#3f7fa8"
-
-
-def _equity_tertile_bands(bands):
-    """
-    Split sorted equity bands into (most-deprived, middle, least-deprived)
-    thirds, matching how lokigi computes avg_lower_third_bins /
-    avg_upper_third_bins - `np.array_split` into three chunks, lowest IMD
-    decile first (this repo registers every problem with
-    `disadvantaged_end="low"`, i.e. decile 1 = most deprived).
-
-    With Devon's ten deciles that is 1-4 / 5-7 / 8-10, NOT the even 1-3 /
-    4-7 / 8-10 the phrase "tertile" suggests - array_split puts the
-    remainder in the first chunk. Verified against the solution pickles:
-    averaging the demand-weighted band means over these exact chunks
-    reproduces avg_lower_third_bins and avg_upper_third_bins to the decimal.
-    """
-    return [list(chunk) for chunk in np.array_split(sorted(bands), 3)]
-
-
-def _plot_equity_tertiles(row):
-    """
-    Bar chart behind the inter-tertile ratio: demand-weighted average travel
-    time for each IMD decile, most deprived first, with the two tertile
-    averages the ratio is actually built from drawn across their own bars.
-
-    The ratio on its own is a single number around 1 whose direction most
-    readers have to stop and reason about ("is lower better here?"). The
-    shape it summarises - whether travel time climbs or falls as deprivation
-    falls - is the thing worth seeing, and a travel-time map can't show it at
-    all, since deprivation isn't geographically contiguous.
-
-    Reads the per-band values straight off the solution row
-    (`weighted_by_equity_group`), the same demand-weighted numbers lokigi
-    averages into the metric, rather than recomputing an unweighted mean per
-    band - which is what `check_solution_equity()` plots, and differs enough
-    (band 3: 18.8 weighted vs 16.5 unweighted) that a reader adding the bars
-    up would not get the ratio in the title.
-    """
-    per_band = row["weighted_by_equity_group"]
-    most, middle, least = _equity_tertile_bands(per_band)
-    ordered = most + middle + least
-
-    colours = (
-        [EQUITY_MOST_DEPRIVED_COLOUR] * len(most)
-        + [EQUITY_MIDDLE_COLOUR] * len(middle)
-        + [EQUITY_LEAST_DEPRIVED_COLOUR] * len(least)
-    )
-
-    _, ax = plt.subplots(figsize=(9, 6))
-    ax.bar(
-        range(len(ordered)),
-        [per_band[b] for b in ordered],
-        color=colours,
-        edgecolor="white",
-    )
-    ax.set_xticks(range(len(ordered)))
-    ax.set_xticklabels([str(b) for b in ordered])
-    ax.set_xlabel("IMD decile (1 = most deprived), most to least deprived")
-    ax.set_ylabel("Average travel time (minutes)")
-
-    # The two numbers the ratio divides, drawn only across the bars they
-    # average, so it reads as "these bars against those bars".
-    for label, bands, value, colour in (
-        (
-            "most deprived third",
-            most,
-            row["avg_lower_third_bins"],
-            EQUITY_MOST_DEPRIVED_COLOUR,
-        ),
-        (
-            "least deprived third",
-            least,
-            row["avg_upper_third_bins"],
-            EQUITY_LEAST_DEPRIVED_COLOUR,
-        ),
-    ):
-        start = ordered.index(bands[0]) - 0.5
-        ax.hlines(
-            value,
-            start,
-            start + len(bands),
-            color=colour,
-            linestyle="--",
-            linewidth=2,
-        )
-        ax.annotate(
-            f"{label}: {value:.1f} min",
-            (start + len(bands) / 2, value),
-            textcoords="offset points",
-            # Clear of the line rather than sitting on it, with a backing box
-            # so it stays legible where it crosses a bar.
-            xytext=(0, 12),
-            ha="center",
-            fontsize=9,
-            color=colour,
-            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5, "alpha": 0.85},
-        )
-
-    ax.margins(y=0.15)
-    return ax
+# actually divides, so they carry colour and the middle stays neutral. Passed
+# to lokigi's plot_equity_tertiles(colours=...), which expects them in
+# most-disadvantaged / middle / least-disadvantaged order.
+EQUITY_TERTILE_COLOURS = ("#c2603f", "#c9c9c9", "#3f7fa8")
 
 
 @st.cache_resource
@@ -783,7 +685,23 @@ def solution_panel_figure(solution, sort_by, solution_rank):
             ),
         )
     elif sort_by == "inter_tertile_ratio":
-        ax = _plot_equity_tertiles(plotted_row)
+        # lokigi 0.9.1's own version of the chart this app previously
+        # hand-rolled. weighted=True (its default, stated here because it's
+        # the whole point) plots the demand-weighted per-band means that
+        # inter_tertile_ratio is built from, so the two tertile lines are the
+        # numbers the ratio divides rather than an unweighted lookalike.
+        # caption="" because the app's explanation lives in
+        # RANK_METRIC_PANEL_CAPTION, below the panel, with the others.
+        _, ax = plt.subplots(figsize=(9, 6))
+        solution.plot_equity_tertiles(
+            solution_rank=solution_rank,
+            sort_by=sort_by,
+            weighted=True,
+            colours=EQUITY_TERTILE_COLOURS,
+            title=None,
+            caption="",
+            ax=ax,
+        )
     else:
         ax = solution.plot_best_combination(
             solution_rank=solution_rank,

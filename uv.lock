@@ -379,7 +379,7 @@ dev = [
 requires-dist = [
     { name = "contextily", specifier = ">=1.7.0" },
     { name = "geopandas", specifier = ">=1.1.3" },
-    { name = "lokigi", extras = ["routing"], specifier = ">=0.9.0" },
+    { name = "lokigi", extras = ["routing"], specifier = ">=0.9.1" },
     { name = "num2words", specifier = ">=0.5.14" },
     { name = "numba", specifier = ">=0.65.1" },
     { name = "osmium", specifier = ">=4.3.1" },
@@ -706,7 +706,7 @@ wheels = [
 
 [[package]]
 name = "lokigi"
-version = "0.9.0"
+version = "0.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "adjusttext" },
@@ -728,9 +728,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "webcolors" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/a8/d0fcde24fde881f701836533f04ef8cbd1b995133e4c56dbc015fd2d39e2/lokigi-0.9.0.tar.gz", hash = "sha256:c87a5ded9e1dbd577655e2e26a32bdf9e8bc3693a9d6d8c9cb4231bb42e97dc6", size = 216767, upload-time = "2026-08-04T12:00:53.428Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/91/22e66ad1804423de74326a163804debd89f73e326e53a160d76418f89a05/lokigi-0.9.1.tar.gz", hash = "sha256:3db51000183116d7ef15e3af9754503e359bc914ba66f5397a36c112b097e708", size = 220580, upload-time = "2026-08-06T14:53:35.539Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/39/a5dafc9aab97a141d77a1e0327430160025ed50098be1ec5e169af95cb04/lokigi-0.9.0-py3-none-any.whl", hash = "sha256:8b6cb63e4107e846adb2c595fd6d5e2ae5f0cc227d78c6ce3f606c6418fc2fa9", size = 229821, upload-time = "2026-08-04T12:00:52.123Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/f6/f3b24abd00a2c1691562aaf0487c8e8a890b68a8ff27584b71051ccd63a3/lokigi-0.9.1-py3-none-any.whl", hash = "sha256:f10b380989642c1126ec2b692f870cc7d50514ba6692de0e9f5f261a727d8a7f", size = 233626, upload-time = "2026-08-06T14:53:33.892Z" },
 ]
 
 [package.optional-dependencies]
@@ -886,7 +886,7 @@ wheels = [
 
 [[package]]
 name = "nbformat"
-version = "5.10.4"
+version = "5.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastjsonschema" },
@@ -894,9 +894,9 @@ dependencies = [
     { name = "jupyter-core" },
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/fd/91545e604bc3dad7dca9ed03284086039b294c6b3d75c0d2fa45f9e9caf3/nbformat-5.10.4.tar.gz", hash = "sha256:322168b14f937a5d11362988ecac2a4952d3d8e3a2cbeb2319584631226d5b3a", size = 142749, upload-time = "2024-04-04T11:20:37.371Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/fd/80f407a9525bc5bd9865e5c37db3b78867fa43217f8aac5eab22b5f028b3/nbformat-5.11.0.tar.gz", hash = "sha256:7dbaed4a69cae28c2b4d44ab7430a6af4544fb89455023f6f21550be757b60c8", size = 151822, upload-time = "2026-08-06T12:29:55.597Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/82/0340caa499416c78e5d8f5f05947ae4bc3cba53c9f038ab6e9ed964e22f1/nbformat-5.10.4-py3-none-any.whl", hash = "sha256:3b48d6c8fbca4b299bf3982ea7db1af21580e4fec269ad087b9e81588891200b", size = 78454, upload-time = "2024-04-04T11:20:34.895Z" },
+    { url = "https://files.pythonhosted.org/packages/be/4a/0eece9dad5e73230ca972f7bc29456ce7d74772f123d401fcf67379008f7/nbformat-5.11.0-py3-none-any.whl", hash = "sha256:f70a17f591a9ccd1c601d5e61a4b20972703926df0ba42458ce14bf575766bb6", size = 79820, upload-time = "2026-08-06T12:29:54.178Z" },
 ]
 
 [[package]]

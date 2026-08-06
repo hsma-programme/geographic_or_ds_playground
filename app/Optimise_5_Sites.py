@@ -352,7 +352,7 @@ if st.session_state.get("optimise_5_sites_ran"):
         st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
 
         st.caption(
-            "An inter-tertile ratio below 1 means those in IMD 1-4 (most deprived) travel "
+            "An inter-tertile ratio below 1 means those in IMD 1-3 (most deprived) travel "
             "less on average than those in IMD 8-10 (least deprived). This tool scores lower "
             "as always better here - a deliberate choice to reward actively cutting travel "
             "times for the most deprived group, not just narrowing the gap to zero."
