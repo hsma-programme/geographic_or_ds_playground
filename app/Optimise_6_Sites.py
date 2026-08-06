@@ -4,8 +4,10 @@ from app.utils import (
     page_styling,
     load_devon_sites,
     write_terminal_html,
-    best_combination_title,
+    solution_panel_figure,
     shared_map_bbox,
+    RANK_METRIC_PANEL_CAPTION,
+    SOLUTION_COMPARISON_METRICS,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
     PARETO_METRICS,
@@ -310,23 +312,12 @@ if st.session_state.get("optimise_6_sites_ran"):
         def plot_best_sols():
             sort_by = st.radio(
                 "Rank On...",
-                [
-                    "weighted_average",
-                    "unweighted_average",
-                    "90th_percentile",
-                    "max",
-                    "proportion_within_coverage_threshold",
-                    "inter_tertile_ratio",
-                    "proportion_demand_improved",
-                    "mean_reduction_among_improved",
-                    "demand_beyond_threshold_45",
-                ],
+                SOLUTION_COMPARISON_METRICS,
                 format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
                 key="rank_on_6",
             )
 
-            plot_threshold = sort_by == "proportion_within_coverage_threshold"
             ascending = RANK_METRIC_ASCENDING[sort_by]
 
             # solution.solution_df (full precision), not solution_df_display -
@@ -335,40 +326,14 @@ if st.session_state.get("optimise_6_sites_ran"):
                 solution.solution_df, selected_site, sort_by, ascending=ascending
             )
 
-            # lokigi's own default title reports whichever metric solve() was
-            # told to rank on - frozen into the pickle, so it named
-            # "proportion demand improved" (as a raw 0-1 proportion) whatever
-            # this radio was set to. title=None + our own set_title() puts the
-            # metric the user actually picked, in its own units, on the map.
-            def plot_with_title(solution_rank):
-                ax = solution.plot_best_combination(
-                    solution_rank=solution_rank,
-                    sort_by=sort_by,
-                    plot_regions_not_meeting_threshold=plot_threshold,
-                    title=None,
-                )
-                # The row lokigi itself selected for this rank, via its own
-                # public accessor - so the numbers in the title always belong
-                # to the map beside them.
-                plotted_row = solution.return_best_combination_details(
-                    sort_by=sort_by, top_n=solution_rank
-                ).iloc[solution_rank - 1]
-                ax.set_title(
-                    best_combination_title(
-                        plotted_row,
-                        sort_by,
-                        n_sites=solution.n_sites,
-                        solution_rank=solution_rank,
-                    ),
-                    fontsize=12,
-                )
-                return ax
-
             # Both figures are built before either is rendered, so they can
             # be cropped to a single shared box and come out the same size -
-            # see shared_map_bbox().
-            fig_best = plot_with_title(1).figure
-            fig_yours = plot_with_title(comparison_rank).figure
+            # see shared_map_bbox(). solution_panel_figure() picks the plot
+            # that answers the selected metric (a travel-time map for most, an
+            # improvement map, a before/after distribution or a 45-minute
+            # threshold map for the three it can't answer) and titles it.
+            fig_best = solution_panel_figure(solution, sort_by, 1)
+            fig_yours = solution_panel_figure(solution, sort_by, comparison_rank)
             map_bbox = shared_map_bbox(fig_best, fig_yours)
 
             # Headings and maps go in two separate column rows, not one row
@@ -389,6 +354,9 @@ if st.session_state.get("optimise_6_sites_ran"):
                 st.pyplot(fig_best, bbox_inches=map_bbox)
             with col2:
                 st.pyplot(fig_yours, bbox_inches=map_bbox)
+
+            if sort_by in RANK_METRIC_PANEL_CAPTION:
+                st.caption(RANK_METRIC_PANEL_CAPTION[sort_by])
 
             sort_by_label = RANK_METRIC_LABELS[sort_by]
 
@@ -521,8 +489,8 @@ if st.session_state.get("optimise_6_sites_ran"):
         st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
 
         st.caption(
-            "An inter-tertile ratio below 1 means those in IMD 1-3 (most deprived) travel "
-            "less on average than those in IMD 7-10 (least deprived). This tool scores lower "
+            "An inter-tertile ratio below 1 means those in IMD 1-4 (most deprived) travel "
+            "less on average than those in IMD 8-10 (least deprived). This tool scores lower "
             "as always better here - a deliberate choice to reward actively cutting travel "
             "times for the most deprived group, not just narrowing the gap to zero."
         )

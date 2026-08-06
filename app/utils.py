@@ -11,8 +11,11 @@ from io import BytesIO
 from pathlib import Path
 import os
 from lokigi.site import SiteProblem
+from lokigi.site_solutions import SolutionComparator
 from lokigi.multiobjective import Metric
 from matplotlib.transforms import Bbox
+from matplotlib.colors import ListedColormap
+import matplotlib.pyplot as plt
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
@@ -59,7 +62,13 @@ RANK_METRIC_LABELS = {
     "unweighted_average": "unweighted average travel time",
     "90th_percentile": "90th percentile travel time",
     "max": "maximum travel time",
-    "proportion_within_coverage_threshold": "coverage within the travel time threshold",
+    # Names the actual cutoff rather than "the travel time threshold": this
+    # metric and demand_beyond_threshold_45 below are both threshold measures
+    # and both draw a two-colour map, so without the numbers in the labels the
+    # only thing telling them apart on screen is which map is on the tab.
+    "proportion_within_coverage_threshold": (
+        f"coverage within {COVERAGE_THRESHOLD_MINUTES} minutes"
+    ),
     "inter_tertile_ratio": "equity (inter-tertile ratio)",
     "proportion_demand_improved": "people with a meaningfully shorter journey",
     "mean_reduction_among_improved": "minutes saved for those who benefit",
@@ -106,6 +115,24 @@ RANK_METRIC_TITLE_VALUE = {
     ),
 }
 
+
+# Order of the "Rank On..." radio on the Solution Comparison tab, shared by
+# both Optimise pages. Deliberately not RANK_METRIC_LABELS' own order: the two
+# threshold measures sit next to each other, so the reader meets "coverage
+# within 30 minutes" and "people still more than 45 minutes away" as an
+# obvious pair of related questions rather than stumbling on the second one
+# four options later and taking it for a repeat of the first.
+SOLUTION_COMPARISON_METRICS = [
+    "weighted_average",
+    "unweighted_average",
+    "90th_percentile",
+    "max",
+    "proportion_within_coverage_threshold",
+    f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}",
+    "inter_tertile_ratio",
+    "proportion_demand_improved",
+    "mean_reduction_among_improved",
+]
 
 # Columns summarised in the "your solution is the Nth best..." bullet list on
 # each Optimise page. A deliberate subset of RANK_METRIC_LABELS - narrower
@@ -445,6 +472,338 @@ def best_combination_title(
         lines.append(f"{n_unreachable} {region_word} unreachable")
 
     return "\n".join(lines)
+
+
+# Explanatory captions for the Solution Comparison panels whose plot isn't a
+# plain travel-time map. Each one says what the colours mean, since none of
+# these plots carries that in a legend.
+RANK_METRIC_PANEL_CAPTION = {
+    "proportion_within_coverage_threshold": (
+        f"**Red** areas are further than {COVERAGE_THRESHOLD_MINUTES} minutes from "
+        "their nearest site; **blue** areas are within it. This is the "
+        f"{COVERAGE_THRESHOLD_MINUTES}-minute question - see "
+        f"\"people still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes away\" for the "
+        "same map drawn at the point where distance stops being an inconvenience "
+        "and starts being a reason not to go."
+    ),
+    "proportion_demand_improved": (
+        "Only the areas whose journey actually gets meaningfully shorter are "
+        f"coloured - at least {MEANINGFUL_CHANGE_MINUTES:.0f} minutes off today's "
+        "travel time. Grey is everywhere the new site changes nothing. Darker blue "
+        "means a bigger saving. Watch the area-versus-people trap here: Devon's "
+        "rural areas are large and sparsely populated, so a big patch of blue can "
+        "be far fewer people than a small one over a town. The headcount in the "
+        "title is the number that counts."
+    ),
+    "mean_reduction_among_improved": (
+        "Journey times across Devon today against journey times with the new site, "
+        "weighted by population. Height is the **share** of people at that journey "
+        "time, not a headcount - the area under each curve is the whole population, "
+        "so the two curves are directly comparable even though only some people "
+        "move. The dashed lines mark each side's average. Most of Devon is "
+        "unaffected, so the curves overlap heavily: the gap between them is the "
+        "whole benefit. Note too that a large improved area on the map for "
+        "\"people with a meaningfully shorter journey\" may be very few people - "
+        "this view is by people, that one is by area."
+    ),
+    "inter_tertile_ratio": (
+        "Average travel time for each deprivation decile, most deprived first, "
+        "weighted by population. The dashed lines are the two numbers the ratio "
+        "divides: the **most deprived third** (deciles 1-4) over the **least "
+        "deprived third** (deciles 8-10). Below 1 means the most deprived travel "
+        "less far on average. The shape across the bars matters as much as the "
+        "ratio - deprivation isn't geographically tidy, so no map can show you this."
+    ),
+    f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}": (
+        f"**Orange** areas are still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes "
+        "from their nearest site once the new site opens; **blue** areas are within "
+        "it. The same picture, and the same colours, as the Left Behind page - but "
+        f"after the money has been spent. Note this is a longer cutoff than the "
+        f"{COVERAGE_THRESHOLD_MINUTES}-minute coverage map, so more of Devon "
+        "qualifies as within it."
+    ),
+}
+
+
+# Two-colour scheme for the "still more than 45 minutes away" map,
+# deliberately different from the red/blue lokigi draws the 30-minute coverage
+# map in - the two panels answer different questions and shouldn't look
+# interchangeable. These are the same orange/blue the Travel by Car and Left
+# Behind pages already use for their own threshold maps, so a reader meets
+# this palette as "the left-behind map" they have seen before.
+LEFT_BEHIND_BEYOND_COLOUR = "#ef8a62"
+LEFT_BEHIND_WITHIN_COLOUR = "#67a9cf"
+
+# Colours for the equity panel's bars: the most-deprived third, the middle,
+# and the least-deprived third. The two ends are what the inter-tertile ratio
+# actually divides, so they carry colour and the middle stays neutral.
+EQUITY_MOST_DEPRIVED_COLOUR = "#c2603f"
+EQUITY_MIDDLE_COLOUR = "#c9c9c9"
+EQUITY_LEAST_DEPRIVED_COLOUR = "#3f7fa8"
+
+
+def _equity_tertile_bands(bands):
+    """
+    Split sorted equity bands into (most-deprived, middle, least-deprived)
+    thirds, matching how lokigi computes avg_lower_third_bins /
+    avg_upper_third_bins - `np.array_split` into three chunks, lowest IMD
+    decile first (this repo registers every problem with
+    `disadvantaged_end="low"`, i.e. decile 1 = most deprived).
+
+    With Devon's ten deciles that is 1-4 / 5-7 / 8-10, NOT the even 1-3 /
+    4-7 / 8-10 the phrase "tertile" suggests - array_split puts the
+    remainder in the first chunk. Verified against the solution pickles:
+    averaging the demand-weighted band means over these exact chunks
+    reproduces avg_lower_third_bins and avg_upper_third_bins to the decimal.
+    """
+    return [list(chunk) for chunk in np.array_split(sorted(bands), 3)]
+
+
+def _plot_equity_tertiles(row):
+    """
+    Bar chart behind the inter-tertile ratio: demand-weighted average travel
+    time for each IMD decile, most deprived first, with the two tertile
+    averages the ratio is actually built from drawn across their own bars.
+
+    The ratio on its own is a single number around 1 whose direction most
+    readers have to stop and reason about ("is lower better here?"). The
+    shape it summarises - whether travel time climbs or falls as deprivation
+    falls - is the thing worth seeing, and a travel-time map can't show it at
+    all, since deprivation isn't geographically contiguous.
+
+    Reads the per-band values straight off the solution row
+    (`weighted_by_equity_group`), the same demand-weighted numbers lokigi
+    averages into the metric, rather than recomputing an unweighted mean per
+    band - which is what `check_solution_equity()` plots, and differs enough
+    (band 3: 18.8 weighted vs 16.5 unweighted) that a reader adding the bars
+    up would not get the ratio in the title.
+    """
+    per_band = row["weighted_by_equity_group"]
+    most, middle, least = _equity_tertile_bands(per_band)
+    ordered = most + middle + least
+
+    colours = (
+        [EQUITY_MOST_DEPRIVED_COLOUR] * len(most)
+        + [EQUITY_MIDDLE_COLOUR] * len(middle)
+        + [EQUITY_LEAST_DEPRIVED_COLOUR] * len(least)
+    )
+
+    _, ax = plt.subplots(figsize=(9, 6))
+    ax.bar(
+        range(len(ordered)),
+        [per_band[b] for b in ordered],
+        color=colours,
+        edgecolor="white",
+    )
+    ax.set_xticks(range(len(ordered)))
+    ax.set_xticklabels([str(b) for b in ordered])
+    ax.set_xlabel("IMD decile (1 = most deprived), most to least deprived")
+    ax.set_ylabel("Average travel time (minutes)")
+
+    # The two numbers the ratio divides, drawn only across the bars they
+    # average, so it reads as "these bars against those bars".
+    for label, bands, value, colour in (
+        (
+            "most deprived third",
+            most,
+            row["avg_lower_third_bins"],
+            EQUITY_MOST_DEPRIVED_COLOUR,
+        ),
+        (
+            "least deprived third",
+            least,
+            row["avg_upper_third_bins"],
+            EQUITY_LEAST_DEPRIVED_COLOUR,
+        ),
+    ):
+        start = ordered.index(bands[0]) - 0.5
+        ax.hlines(
+            value,
+            start,
+            start + len(bands),
+            color=colour,
+            linestyle="--",
+            linewidth=2,
+        )
+        ax.annotate(
+            f"{label}: {value:.1f} min",
+            (start + len(bands) / 2, value),
+            textcoords="offset points",
+            # Clear of the line rather than sitting on it, with a backing box
+            # so it stays legible where it crosses a bar.
+            xytext=(0, 12),
+            ha="center",
+            fontsize=9,
+            color=colour,
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5, "alpha": 0.85},
+        )
+
+    ax.margins(y=0.15)
+    return ax
+
+
+@st.cache_resource
+def evaluate_combination_at_threshold(site_names: tuple[str, ...], threshold: float):
+    """
+    One specific combination of sites, re-evaluated against an arbitrary
+    coverage threshold, as a one-solution SiteSolutionSet.
+
+    lokigi's threshold map (`plot_best_combination(
+    plot_regions_not_meeting_threshold=True)`) colours regions by the
+    `within_threshold` flag computed at solve time - here 30 minutes, the
+    coverage threshold the whole solution set was solved against. There is no
+    kwarg to redraw it at a different cutoff, and overriding the stored
+    threshold would relabel the map without recolouring it. Re-evaluating the
+    combination at the threshold we actually want is what makes the colours
+    and the label agree.
+
+    `site_names` is a tuple rather than a list so it can be a cache key.
+    Verified against the pickled solution set: the 45-minute re-evaluation
+    reproduces its `demand_beyond_threshold_45` exactly.
+    """
+    return setup_lokigi_site_problem_car().evaluate_baseline(
+        site_names=list(site_names), threshold_for_coverage=threshold
+    )
+
+
+def _overlay_solution_sites(ax, site_problem, site_names):
+    """
+    Draw a solution's sites onto a plot that doesn't already show them,
+    using the same shapes as lokigi's own maps: triangles for the sites that
+    are already open, circles for the ones this solution adds.
+
+    plot_population_impact_map()'s own `show_sites="all"` marks every
+    *candidate* site on the problem, open or not, which on this page reads as
+    though all fourteen had been built.
+    """
+    sites = site_problem.candidate_sites
+    chosen = sites[sites["Facility_Name"].isin(site_names)]
+    existing = chosen[chosen["Existing"] == "Yes"]
+    added = chosen[chosen["Existing"] != "Yes"]
+
+    if not existing.empty:
+        existing.plot(ax=ax, color="black", marker="^", markersize=45, label="Required sites")
+    if not added.empty:
+        added.plot(
+            ax=ax,
+            color="black",
+            marker="o",
+            markersize=45,
+            label="Additional selected sites",
+        )
+    ax.legend(loc="upper right", fontsize=9)
+
+
+def solution_panel_figure(solution, sort_by, solution_rank):
+    """
+    The figure for one side of the Solution Comparison tab's two panels.
+
+    Most metrics get lokigi's travel-time map, but three of them are asking a
+    question that map can't answer, and get a purpose-built plot instead:
+
+    - "people with a meaningfully shorter journey" -> where the improvements
+      actually land (`plot_population_impact_map(direction="improved")`),
+      rather than a travel-time map that looks near-identical whether 8% or
+      18% of Devon benefits;
+    - "minutes saved for those who benefit" -> the before/after distribution
+      of journey times (`plot_population_impact_histogram`), the only view
+      that shows the journey times themselves moving;
+    - "people still more than 45 minutes away" -> a threshold map drawn at 45
+      minutes (see evaluate_combination_at_threshold), not at the 30-minute
+      coverage threshold everything else uses.
+
+    The first two compare against today's network via a SolutionComparator,
+    with `config_b` picking the same solution `solution_rank`/`sort_by` picks
+    for every other panel - cross-checked against solution_df: the comparator
+    reports the same demand_improved and mean_reduction_among_improved values
+    that the title prints.
+
+    Returns the Figure. The title is set here so every panel is labelled the
+    same way whatever it plots.
+    """
+    plotted_row = solution.return_best_combination_details(
+        sort_by=sort_by, top_n=solution_rank
+    ).iloc[solution_rank - 1]
+    site_names = list(plotted_row["site_names"])
+    config_b = {"sort_by": sort_by, "solution_rank": solution_rank}
+
+    n_added = len(list(plotted_row.get("additional_site_names", []) or []))
+    comparator = SolutionComparator(
+        evaluate_car_baseline(),
+        solution,
+        labels=(
+            "Today's network",
+            f"With the new site{'s' if n_added != 1 else ''}",
+        ),
+    )
+
+    if sort_by == "proportion_demand_improved":
+        _, ax = comparator.plot_population_impact_map(
+            direction="improved",
+            meaningful_change_threshold=MEANINGFUL_CHANGE_MINUTES,
+            config_b=config_b,
+            title=None,
+        )
+        _overlay_solution_sites(ax, solution.site_problem, site_names)
+    elif sort_by == "mean_reduction_among_improved":
+        _, ax = comparator.plot_population_impact_histogram(
+            config_b=config_b,
+            kind="kde",
+            title=None,
+            # lokigi writes its own caption into the figure explaining that a
+            # KDE's height is a share rather than a headcount. Suppressed here
+            # and folded into RANK_METRIC_PANEL_CAPTION below, so all the
+            # explanation for a panel sits in one place, styled like the rest
+            # of the page, instead of half inside the image.
+            caption="",
+        )
+        # "Travel cost" is the library's internal framing; on this page it is
+        # always minutes in a car.
+        ax.set_xlabel("Travel time to nearest site (minutes)")
+        # Shrink the existing legend in place rather than calling ax.legend()
+        # again - lokigi builds it from explicit proxy handles, which a bare
+        # ax.legend() can't rediscover, so re-calling it silently replaces a
+        # four-entry legend with an empty one.
+        legend = ax.get_legend()
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_fontsize(8)
+    elif sort_by == f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}":
+        ax = evaluate_combination_at_threshold(
+            tuple(site_names), LEFT_BEHIND_THRESHOLDS[0]
+        ).plot_best_combination(
+            plot_regions_not_meeting_threshold=True,
+            title=None,
+            # lokigi takes the first two colours of `cmap` for the two
+            # threshold categories, beyond-first - so this is (beyond,
+            # within), and it keeps this map visibly distinct from the
+            # 30-minute coverage map's red/blue.
+            cmap=ListedColormap(
+                [LEFT_BEHIND_BEYOND_COLOUR, LEFT_BEHIND_WITHIN_COLOUR]
+            ),
+        )
+    elif sort_by == "inter_tertile_ratio":
+        ax = _plot_equity_tertiles(plotted_row)
+    else:
+        ax = solution.plot_best_combination(
+            solution_rank=solution_rank,
+            sort_by=sort_by,
+            plot_regions_not_meeting_threshold=(
+                sort_by == "proportion_within_coverage_threshold"
+            ),
+            title=None,
+        )
+
+    ax.set_title(
+        best_combination_title(
+            plotted_row,
+            sort_by,
+            n_sites=solution.n_sites,
+            solution_rank=solution_rank,
+        ),
+        fontsize=12,
+    )
+    return ax.figure
 
 
 def shared_map_bbox(*figures):
