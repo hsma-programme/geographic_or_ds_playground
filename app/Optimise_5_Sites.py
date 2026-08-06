@@ -255,21 +255,25 @@ if st.session_state.get("optimise_5_sites_ran"):
             ).figure
             map_bbox = shared_map_bbox(fig_best, fig_yours)
 
-            col1, col2 = st.columns(2)
+            # Headings and maps go in two separate column rows, not one row
+            # of heading-then-map. The two headings are wildly different
+            # lengths ("Best Solution Based on weighted average travel time"
+            # wraps to three lines in the display font where "Your Selected
+            # Solution" fits on one), and inside a single row that pushed one
+            # map down by the difference. As its own row, the heading block
+            # takes the height of the taller heading and both maps start
+            # underneath it - no assumption about how many lines either wraps
+            # to.
+            head_1, head_2 = st.columns(2)
+            with head_1:
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
+            with head_2:
+                st.subheader("Your Selected Solution")
 
+            col1, col2 = st.columns(2)
             with col1:
-                # The heading sits in a keyed container so style.css can hold
-                # both columns' headings to the same height - the left one
-                # wraps to two lines for the longer metric names and the
-                # right one doesn't, which knocked the maps out of step.
-                with st.container(key="map_panel_heading_best"):
-                    st.subheader(
-                        f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}"
-                    )
                 st.pyplot(fig_best, bbox_inches=map_bbox)
             with col2:
-                with st.container(key="map_panel_heading_yours"):
-                    st.subheader("Your Selected Solution")
                 st.pyplot(fig_yours, bbox_inches=map_bbox)
 
         plot_best_sols()

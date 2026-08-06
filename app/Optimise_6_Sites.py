@@ -371,22 +371,23 @@ if st.session_state.get("optimise_6_sites_ran"):
             fig_yours = plot_with_title(comparison_rank).figure
             map_bbox = shared_map_bbox(fig_best, fig_yours)
 
-            col1, col2 = st.columns(2)
+            # Headings and maps go in two separate column rows, not one row
+            # of heading-then-map. Either heading can wrap (a long metric
+            # name on the left, a long site name on the right) while the
+            # other doesn't, and inside a single row that pushed one map down
+            # by the difference. As its own row, the heading block takes the
+            # height of the taller heading and both maps start underneath it
+            # - no assumption about how many lines either wraps to.
+            head_1, head_2 = st.columns(2)
+            with head_1:
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
+            with head_2:
+                st.subheader(f"Best Solution Still Including {selected_site}")
 
+            col1, col2 = st.columns(2)
             with col1:
-                # The heading sits in a keyed container so style.css can hold
-                # both columns' headings to the same height - either can wrap
-                # to two lines (a long metric name on the left, a long site
-                # name on the right) while the other doesn't, which knocked
-                # the maps out of step.
-                with st.container(key="map_panel_heading_best"):
-                    st.subheader(
-                        f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}"
-                    )
                 st.pyplot(fig_best, bbox_inches=map_bbox)
             with col2:
-                with st.container(key="map_panel_heading_yours"):
-                    st.subheader(f"Best Solution Still Including {selected_site}")
                 st.pyplot(fig_yours, bbox_inches=map_bbox)
 
             sort_by_label = RANK_METRIC_LABELS[sort_by]

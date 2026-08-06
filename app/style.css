@@ -37,21 +37,6 @@ div[data-testid="stButton"] button {
     /* Adds breathing room between the larger icon and text */
 }
 
-/* Optimise pages, Solution Comparison tab: the headings above the two
-   side-by-side maps. One of them names the ranked-on metric ("Best Solution
-   Based on people with a meaningfully shorter journey") and the other names
-   a site, so at half-width one routinely wraps to two lines while the other
-   stays on one - which pushed its map down and left the pair out of
-   alignment. Pinning line-height makes two lines exactly 2.4em, so a
-   one-line and a two-line heading occupy identical space.
-
-   The images themselves are kept the same size by shared_map_bbox() in
-   app/utils.py; this handles the headings above them. */
-[class*="st-key-map_panel_heading"] h3 {
-    line-height: 1.2;
-    min-height: 2.4em;
-}
-
 /* Investigation tiles (investigation_button() in app/utils.py): the locked
    (prerequisites unmet) and visited (already done) non-clickable states.
    Colours are theme-aware - hardcoded light values would render as a bright
