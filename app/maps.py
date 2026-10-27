@@ -95,8 +95,33 @@ def add_sites_to_map(m, sites_gdf, add_centroids=False, centroid_gdf=None):
     return m
 
 
+def _legend_pin(color, label, icon_color="white"):
+    """One legend row with a shrunken copy of the actual map pin.
+
+    Reuses the same Leaflet.awesome-markers classes folium.Icon renders on the
+    map (folium loads that stylesheet on every map page), so the swatch is the
+    real teardrop sprite and glyph rather than a bare "+" that only matches the
+    pin's colour. The marker is absolutely positioned by that stylesheet, so it
+    is scaled inside a fixed-size wrapper that holds its place in the row.
+    """
+    glyph_class = "icon-white" if icon_color == "white" else ""
+    glyph_style = "" if icon_color == "white" else f' style="color:{icon_color}"'
+    return f"""
+    <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <span style="position:relative;display:inline-block;width:21px;
+            height:28px;flex-shrink:0;">
+            <span class="awesome-marker awesome-marker-icon-{color}"
+                style="transform:scale(0.6);transform-origin:top left;">
+                <i class="fa fa-plus {glyph_class}"{glyph_style}></i>
+            </span>
+        </span>
+        <span>{label}</span>
+    </div>
+    """
+
+
 def add_site_legend(m):
-    legend_html = """
+    legend_html = f"""
     <div class="site-maplegend" style="
         position: fixed;
         bottom: 50px;
@@ -108,13 +133,9 @@ def add_site_legend(m):
         font-size: 14px;
         padding: 10px;
     ">
-    <b>CDC Sites</b><br>
-
-    <i class="fa fa-plus" style="color:red"></i>
-    Existing CDC<br>
-
-    <i class="fa fa-plus" style="color:blue"></i>
-    Proposed CDC
+    <b>CDC Sites</b>
+    {_legend_pin("red", "Existing CDC")}
+    {_legend_pin("blue", "Proposed CDC")}
     </div>
     """
 
@@ -495,7 +516,7 @@ def _build_regional_demand_map(zoom=9):
 
 
 def _add_reference_site_legend(m):
-    legend_html = """
+    legend_html = f"""
     <div class="ref-maplegend" style="
         position: fixed;
         bottom: 50px;
@@ -507,11 +528,9 @@ def _add_reference_site_legend(m):
         font-size: 14px;
         padding: 10px;
     ">
-    <b>CDC sites</b><br>
-    <span style="display:inline-block;width:12px;height:12px;background:white;
-    border:1px solid #777;vertical-align:middle;"></span> Existing CDC<br>
-    <span style="display:inline-block;width:12px;height:12px;background:gray;
-    border:1px solid #777;vertical-align:middle;"></span> Proposed CDC<br>
+    <b>CDC sites</b>
+    {_legend_pin("white", "Existing CDC", icon_color="#333333")}
+    {_legend_pin("gray", "Proposed CDC", icon_color="#333333")}
     <span style="font-size:11px;color:#555;">Shown for reference only —
     choose your site on the left-hand map.</span>
     </div>
@@ -530,7 +549,7 @@ def _add_reference_site_legend(m):
 
 
 def _add_utilisation_legend(m):
-    legend_html = """
+    legend_html = f"""
     <div class="util-maplegend" style="
         position: fixed;
         bottom: 50px;
@@ -552,9 +571,8 @@ def _add_utilisation_legend(m):
     <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
         background:#a50026;border:1px solid #333;"></span>
     At / over capacity (&ge;100%)<br>
-    <span style="margin-top:4px;display:inline-block;"></span>
-    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
-    <br><span style="font-size:11px;color:#555;">Larger circle = busier site</span>
+    {_legend_pin("blue", "Proposed CDC")}
+    <span style="font-size:11px;color:#555;">Larger circle = busier site</span>
     </div>
     """
 
@@ -692,7 +710,7 @@ def _add_2sfca_legend(m):
     # numbers explore would print, show the red->blue ramp with what it means,
     # plus the CDC site markers, in a single box. RdYlBu stops (colourblind-safe
     # alternative to lokigi's own red/green convention - see render_2sfca_map).
-    legend_html = """
+    legend_html = f"""
     <div class="sfca-maplegend" style="
         position: fixed;
         bottom: 50px;
@@ -715,9 +733,9 @@ def _add_2sfca_legend(m):
     <span style="font-size:11px;color:#555;">Darkest red areas cannot reach any
     CDC within the travel limit.</span>
     <hr style="margin:8px 0;border:none;border-top:1px solid #ddd;">
-    <b>CDC sites</b><br>
-    <i class="fa fa-plus" style="color:red"></i> Existing CDC<br>
-    <i class="fa fa-plus" style="color:blue"></i> Proposed CDC
+    <b>CDC sites</b>
+    {_legend_pin("red", "Existing CDC")}
+    {_legend_pin("blue", "Proposed CDC")}
     </div>
     """
 
