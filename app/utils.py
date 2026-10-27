@@ -30,9 +30,9 @@ COVERAGE_THRESHOLD_MINUTES = 30
 LEFT_BEHIND_THRESHOLDS = [45, 60]
 
 # Shared basemap for every folium/leaflet map in the app, so switching styles
-# only requires changing this one value. CartoDB Voyager keeps roads/labels
-# visible (unlike Positron) while staying more muted than default OpenStreetMap.
-BASEMAP_TILES = "cartodbvoyager"
+# only requires changing this one value. Esri World Street Map keeps roads/labels
+# visible without an API key (CARTO basemaps such as Voyager now require one).
+BASEMAP_TILES = "Esri.WorldStreetMap"
 
 # Which direction "best" sorts in for each optimiser solution_df metric - lower
 # is better for every travel-time-style column, higher is better for coverage.
@@ -1094,6 +1094,7 @@ def write_terminal_html(
     reveal_speed_ms: int = TERMINAL_DEFAULT_SPEED,
     cursor: str = "block",
     stay_blinking: bool = True,
+    start_delay_ms: int = 0,
 ):
     with open("app/assets/terminal.css") as f:
         css = f.read()
@@ -1124,6 +1125,7 @@ def write_terminal_html(
     var REVEAL_SPEED_MS = {reveal_speed_ms};
     var CURSOR = {repr(cursor)};
     var STAY_BLINKING = {"true" if stay_blinking else "false"};
+    var START_DELAY_MS = {start_delay_ms};
     {js}
   </script>
 </body>

@@ -6,6 +6,7 @@ from app.utils import (
     page_styling,
     select_site_from_current_evidence,
     render_prior_choice_recap,
+    write_crt_html,
 )
 from app.utils_investigations import DEMAND
 from app.maps import render_demand_map, make_selection_map
@@ -34,7 +35,17 @@ if not st.session_state.site_submitted_demand:
         intro_text,
         output_path="app/assets/terminal_working/demand.html",
     )
-    st.iframe(Path("app/assets/terminal_working/demand.html"), height=350)
+    cola, colb = st.columns([0.6, 0.4])
+    cola.iframe(Path("app/assets/terminal_working/demand.html"), height=400)
+
+    generated_crt = write_crt_html(
+        image_path="app/assets/demand.png",
+        output_path="app/assets/crt_working/demand.html",
+        curvature=0.3,
+        scanlines=0.6,
+    )
+    colb.iframe(Path(generated_crt))
+
     render_prior_choice_recap(DEMAND)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")

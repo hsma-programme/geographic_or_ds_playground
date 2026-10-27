@@ -57,7 +57,8 @@ document.addEventListener("DOMContentLoaded", function() {
         entries.forEach(function(entry) {
             // If the terminal element enters the viewport
             if (entry.isIntersecting) {
-                startTypewriter(entry.target);
+                var target = entry.target;
+                setTimeout(function() { startTypewriter(target); }, START_DELAY_MS);
                 // Stop watching this element so it doesn't trigger again on re-scroll
                 observerInstance.unobserve(entry.target);
             }
