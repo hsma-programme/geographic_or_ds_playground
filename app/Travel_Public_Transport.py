@@ -52,7 +52,10 @@ if not st.session_state.site_submitted_public_transport:
 # Note the session key doesn't follow the name of the page as the automated rules
 # would make it display weirdly
 pt_travel_selection_map = make_selection_map(
-    partial(render_travel_maps, best_solution_gdf), "public_transport"
+    partial(
+        render_travel_maps, best_solution_gdf, "by public transport", max_threshold=180
+    ),
+    "public_transport",
 )
 pt_travel_selection_map()
 

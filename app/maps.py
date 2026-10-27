@@ -11,6 +11,7 @@ from app.utils import (
     setup_lokigi_site_problem_utilisation,
     SITE_SELECTION_LABELS,
 )
+import html
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -498,7 +499,12 @@ def _build_regional_demand_map(zoom=9):
         folium.Marker(
             location=[row.geometry.y, row.geometry.x],
             popup=row["Facility_Name"],
-            tooltip=f"{row['Facility_Name']} — choose your site on the left-hand map",
+            # Split over two lines: Leaflet tooltips don't wrap, and on one
+            # line this ran wider than the half-width map it sits on.
+            tooltip=(
+                f"<b>{html.escape(row['Facility_Name'])}</b><br>"
+                "Choose your site on the left-hand map"
+            ),
             # Dark glyph so the white (existing) pin stays legible over the choropleth.
             icon=folium.Icon(
                 icon="plus",
@@ -850,25 +856,25 @@ def render_travel_existing_map(best_solution_gdf, what, threshold=None):
     return st_folium(m, width="stretch")
 
 
-def render_travel_maps(best_solution_gdf):
-    map_selection = st.radio(
-        "Select map type",
-        [
-            "Show travel time",
-            "Show current nearest centre",
-            "Show regions exceeding a certain travel time",
-        ],
-    )
+def render_travel_maps(best_solution_gdf, mode_label, max_threshold=60):
+    """`mode_label` ("by car" / "by public transport") is repeated on every
+    option, so the car and public transport pages can't be mistaken for one
+    another at a glance. `max_threshold` is the travel-time slider's upper
+    end - public transport journeys run far longer than car ones."""
+    views = {
+        f"Show travel time {mode_label}": "time",
+        f"Show current nearest centre {mode_label}": "centre",
+        f"Show regions exceeding a certain travel time {mode_label}": "threshold",
+    }
+    what = views[st.radio("Select map type", list(views))]
 
-    if map_selection == "Show travel time":
-        return render_travel_existing_map(best_solution_gdf, what="time")
-    elif map_selection == "Show current nearest centre":
-        return render_travel_existing_map(best_solution_gdf, what="centre")
-    elif map_selection == "Show regions exceeding a certain travel time":
+    if what in ("time", "centre"):
+        return render_travel_existing_map(best_solution_gdf, what=what)
+    else:
         threshold = st.slider(
             label="Choose a maximum travel time",
             min_value=15,
-            max_value=60,
+            max_value=max_threshold,
             value=45,
             step=5,
         )
@@ -1134,8 +1140,16 @@ def make_selection_map(
         # Above the map rather than below it, so it's read before the first
         # click and stays visible after one. The default caveat is true of
         # every map in the evidence pool - none of them model the new site - so
-        # it lives here once rather than in each page's analyst intro.
-        st.info(instruction, icon=":material/touch_app:")
+        # it lives here once rather than in each page's analyst intro. The map
+        # controls line is shared, so pages passing their own instruction
+        # don't each have to repeat it.
+        st.info(
+            f"{instruction}\n\n"
+            "**Map controls:** zoom with the + and - buttons (top left) or your "
+            "mouse wheel, click and drag to move around, and hover over an area "
+            "to see its details.",
+            icon=":material/touch_app:",
+        )
 
         st_data = map_render_fn()
 
@@ -1143,7 +1157,9 @@ def make_selection_map(
             "You won't see the whole picture from one page. Commit to your best "
             "call now; you'll find out later how it holds up as the evidence builds."
         )
-        st.write("From just the evidence on this page, which site would you choose?")
+        st.write(
+            "From :orange[just the evidence on this page], which site would you choose?"
+        )
 
         all_sites = load_devon_sites()
         existing_sites = all_sites[all_sites["Existing"] == "Yes"][

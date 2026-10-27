@@ -1337,7 +1337,10 @@ def render_prior_choice_recap(investigation: Investigation) -> None:
     prior = most_recent_prior_choice(investigation.id)
     if prior is None:
         return
-    st.info(
+    # Green, not blue: the "click a blue pin" instruction box sits directly
+    # below this on every evidence page, and two adjacent blue boxes read as
+    # one block.
+    st.success(
         f"Last time you committed to a site, you picked **{prior['Site']}** "
         f"— based on {prior['What']}. Let's see what this page adds.",
         icon=":material/history:",

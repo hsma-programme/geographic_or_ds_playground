@@ -56,7 +56,7 @@ if not st.session_state.site_submitted_car_travel:
 # Note the session key doesn't follow the name of the page as the automated rules would
 # make it display weirdly
 car_travel_selection_map = make_selection_map(
-    partial(render_travel_maps, best_solution_gdf), "car_travel"
+    partial(render_travel_maps, best_solution_gdf, "by car"), "car_travel"
 )
 car_travel_selection_map()
 
