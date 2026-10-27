@@ -17,32 +17,35 @@ page_styling()
 st.title("Demand")
 
 intro_text = """
-> Your analyst has delivered the following map.
+> Your analyst has delivered a map of the population aged 50-84 - the people most likely to need a CDC. Yellow areas have the most people, purple the fewest. Hover over an area to see its exact count.
 <br><br>
-> They tell you that you can hover over the red icons (the current CDCs) and the blue icons (the proposed CDCs) to find out more.
+> The analyst then becomes pixellated and returns to the cloud until they are next required.
 <br><br>
-> They also tell you that you can hover over each coloured region to see the exact count of people 50-84 in the region.
-<br><br>
-> They let you know that yellow is the highest demand, and purple means lower demand. They mention that you can use the + and - buttons in the top left to zoom in and out.
-<br><br>
-> They then become pixellated and return to the cloud until they are next required. You hope the map works.
+> You hope the map works.
 """
 
 # Once a decision has been made on this page, drop the analyst intro so a
 # revisit shows just the evidence and outcome.
 if not st.session_state.site_submitted_demand:
-    write_terminal_html(
+    char_count, reveal_speed = write_terminal_html(
         intro_text,
         output_path="app/assets/terminal_working/demand.html",
     )
     cola, colb = st.columns([0.6, 0.4])
-    cola.iframe(Path("app/assets/terminal_working/demand.html"), height=400)
+    cola.iframe(Path("app/assets/terminal_working/demand.html"), height=250)
+
+    # Swap the CRT image just after the text finishes typing. The terminal and
+    # CRT are separate iframes, so they can't signal each other - this is an
+    # estimate from the text's length and speed.
+    swap_delay_ms = char_count * reveal_speed + 600
 
     generated_crt = write_crt_html(
         image_path="app/assets/demand.png",
         output_path="app/assets/crt_working/demand.html",
         curvature=0.3,
         scanlines=0.6,
+        next_image_path="app/assets/demand_2.png",
+        swap_delay_ms=swap_delay_ms,
     )
     colb.iframe(Path(generated_crt))
 

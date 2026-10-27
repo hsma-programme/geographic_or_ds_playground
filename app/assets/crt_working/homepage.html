@@ -337,7 +337,49 @@ export class CRTFilterWebGL {
             } catch (e) {
                 console.error("CRTFilter runtime exception:", e);
             }
+
+            if (NEXT_IMAGE_SRC) {
+                const img2 = new Image();
+                img2.src = NEXT_IMAGE_SRC;
+                img2.onload = () => setTimeout(() => startWipe(img2), SWAP_DELAY_MS);
+            }
         };
+
+        const NEXT_IMAGE_SRC = null;
+        const SWAP_DELAY_MS = 0;
+        const WIPE_DURATION_MS = 1200;
+        const BEAM_TRAIL_PX = 30;
+
+        function startWipe(img2) {
+            const w = canvas.width;
+            const h = canvas.height;
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                ctx.drawImage(img2, 0, 0);
+                return;
+            }
+            const startTime = performance.now();
+
+            function frame(now) {
+                const t = Math.min((now - startTime) / WIPE_DURATION_MS, 1);
+                const y = Math.round(t * h);
+                // Redrawing every revealed row also clears last frame's beam;
+                // the old image below the beam is left untouched.
+                if (y > 0) ctx.drawImage(img2, 0, 0, w, y, 0, 0, w, y);
+                if (t >= 1) return;
+
+                const trailTop = Math.max(0, y - BEAM_TRAIL_PX);
+                const glow = ctx.createLinearGradient(0, trailTop, 0, y);
+                glow.addColorStop(0, "rgba(180, 255, 200, 0)");
+                glow.addColorStop(1, "rgba(180, 255, 200, 0.55)");
+                ctx.fillStyle = glow;
+                ctx.fillRect(0, trailTop, w, y - trailTop);
+                ctx.fillStyle = "rgba(235, 255, 240, 0.95)";
+                ctx.fillRect(0, Math.max(0, y - 4), w, 4);
+
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
     </script>
 </body>
 </html>

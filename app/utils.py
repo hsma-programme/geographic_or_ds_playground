@@ -1144,21 +1144,37 @@ def write_crt_html(
     curvature: float = 0.15,
     scanlines: float = 0.3,
     vignette: float = 0.2,
+    next_image_path: str | None = None,
+    swap_delay_ms: int = 0,
+    wipe_duration_ms: int = 1200,
 ):
     """
     Writes a self-contained HTML file applying CRTFilter.js to a target image,
     matching the architecture of your working terminal generator.
+
+    If `next_image_path` is given, that image replaces the first one after
+    `swap_delay_ms`, revealed top-to-bottom behind a glowing scanline "beam"
+    over `wipe_duration_ms`. The CRT filter re-reads the source canvas every
+    frame, so the wipe is drawn on the plain 2D canvas and still gets the CRT
+    treatment. Users who prefer reduced motion get an instant cut instead.
     """
     # 1. Read the local JavaScript file source
     # (Using utf-8 to ensure smooth reading across different OS environments)
     with open("app/assets/CRTFilter.js", "r", encoding="utf-8") as f:
         js_library = f.read()
 
-    # 2. Convert the image asset to a base64 string
-    image = Image.open(image_path)
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    image_b64 = base64.b64encode(buffered.getvalue()).decode()
+    # 2. Convert the image asset(s) to base64 strings
+    def _png_b64(path: str) -> str:
+        buffered = BytesIO()
+        Image.open(path).save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+
+    image_b64 = _png_b64(image_path)
+    next_image_src = (
+        f'"data:image/png;base64,{_png_b64(next_image_path)}"'
+        if next_image_path
+        else "null"
+    )
 
     # 3. Generate the self-contained HTML
     # Note: We use type="module" so the browser handles the library's ES exports flawlessly.
@@ -1217,7 +1233,49 @@ def write_crt_html(
             }} catch (e) {{
                 console.error("CRTFilter runtime exception:", e);
             }}
+
+            if (NEXT_IMAGE_SRC) {{
+                const img2 = new Image();
+                img2.src = NEXT_IMAGE_SRC;
+                img2.onload = () => setTimeout(() => startWipe(img2), SWAP_DELAY_MS);
+            }}
         }};
+
+        const NEXT_IMAGE_SRC = {next_image_src};
+        const SWAP_DELAY_MS = {swap_delay_ms};
+        const WIPE_DURATION_MS = {wipe_duration_ms};
+        const BEAM_TRAIL_PX = 30;
+
+        function startWipe(img2) {{
+            const w = canvas.width;
+            const h = canvas.height;
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {{
+                ctx.drawImage(img2, 0, 0);
+                return;
+            }}
+            const startTime = performance.now();
+
+            function frame(now) {{
+                const t = Math.min((now - startTime) / WIPE_DURATION_MS, 1);
+                const y = Math.round(t * h);
+                // Redrawing every revealed row also clears last frame's beam;
+                // the old image below the beam is left untouched.
+                if (y > 0) ctx.drawImage(img2, 0, 0, w, y, 0, 0, w, y);
+                if (t >= 1) return;
+
+                const trailTop = Math.max(0, y - BEAM_TRAIL_PX);
+                const glow = ctx.createLinearGradient(0, trailTop, 0, y);
+                glow.addColorStop(0, "rgba(180, 255, 200, 0)");
+                glow.addColorStop(1, "rgba(180, 255, 200, 0.55)");
+                ctx.fillStyle = glow;
+                ctx.fillRect(0, trailTop, w, y - trailTop);
+                ctx.fillStyle = "rgba(235, 255, 240, 0.95)";
+                ctx.fillRect(0, Math.max(0, y - 4), w, 4);
+
+                requestAnimationFrame(frame);
+            }}
+            requestAnimationFrame(frame);
+        }}
     </script>
 </body>
 </html>"""
