@@ -29,14 +29,10 @@ best_solution_gdf = region_geometry.merge(
     best_solution_df, left_on="LSOA21NM", right_on="LSOA 2021 Name"
 )
 
-intro_text = f"""
-> The analyst returns with the same map as before, but this time the travel times are for public transport rather than the car.
+intro_text = """
+> The analyst returns with the same map - travel from the centre of each LSOA, a small area of around 1,500 people, to its nearest CDC - but this time by public transport.
 <br><br>
-> They tell you that you can swap between each LSOA - a small statistical area of around 1,500 people - showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
-<br><br>
-> "Same catch as last time," they add. "The colours only reflect the sites open today - the candidate pins are there for you to pick from, not to show what would happen if one were actually built."
-<br><br>
-> They warn you that the numbers can look rather different this time, and that public transport in rural Devon is not for the faint-hearted.
+> They warn you the numbers look rather different this time. Public transport in rural Devon is not for the faint-hearted.
 <br><br>
 > They have now used the phrase "transport modelling is more complicated than people realise" on seventeen separate occasions. You have stopped counting out loud.
 """

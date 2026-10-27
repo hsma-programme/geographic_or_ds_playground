@@ -414,8 +414,8 @@ def render_utilisation_map():
         demand_m = _build_regional_demand_map(zoom=8)
         st_folium(demand_m, width="stretch", key="utilisation_demand_map")
         st.caption(
-            "Darker areas have more people aged 50-84 - the group most likely to "
-            "need CDC services. The white markers are for reference only; make your "
+            "Darker areas have more people aged 50-84 - the people you've been "
+            "asked to prioritise. The white markers are for reference only; make your "
             "site choice on the left-hand map."
         )
 
@@ -1100,6 +1100,17 @@ def make_selection_map(map_render_fn, key_suffix):
             )
             return
 
+        # Above the map rather than below it, so it's read before the first
+        # click and stays visible after one. The caveat is true of every map
+        # in the evidence pool - none of them model the new site - so it lives
+        # here once rather than in each page's analyst intro.
+        st.info(
+            "Click a blue pin to choose a site. This map shows today's four CDCs "
+            "only - picking a pin doesn't redraw it to show what the new site "
+            "would change.",
+            icon=":material/touch_app:",
+        )
+
         st_data = map_render_fn()
 
         st.caption(
@@ -1115,26 +1126,28 @@ def make_selection_map(map_render_fn, key_suffix):
 
         selected_site = st_data["last_object_clicked_popup"]
 
+        # The selected site is named on the confirm button itself rather than in
+        # a separate success box, so choosing doesn't add another box to a page
+        # that already has the instruction box above the map.
         if selected_site is None:
-            st.warning(
-                "Click on a blue candidate site on the map above to make your selection."
-            )
             # Reset confirmation if no site is selected
             st.session_state[confirmed_key] = None
+            button_label = "Click a blue pin on the map to choose a site"
         elif selected_site in existing_sites:
             st.error(
                 "Cannot select an existing site. Please click on a proposed site (the blue markers)."
             )
             st.session_state[confirmed_key] = None
+            button_label = "Click a blue pin on the map to choose a site"
         else:
-            st.success(f"Selected Site = {selected_site}")
             st.session_state[confirmed_key] = {
                 "What": label,
                 "Site": selected_site,
             }
+            button_label = f"Confirm {selected_site}"
 
         button = st.button(
-            "Click here to confirm your site choice",
+            button_label,
             disabled=True
             if (
                 st.session_state[confirmed_key] is None

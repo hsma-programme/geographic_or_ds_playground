@@ -35,16 +35,10 @@ best_solution_gdf = region_geometry.merge(
 )
 
 
-intro_text = f"""
-> The analyst presents you with the following map of how long it takes to travel from the centre of each LSOA - a small statistical area of around 1,500 people - to its nearest site.
+intro_text = """
+> The analyst presents a map of how long it takes to drive from the centre of each LSOA - a small statistical area of around 1,500 people - to its nearest CDC. Hover over an area to see its time.
 <br><br>
-> They tell you that you can swap between each LSOA showing the travel time, the nearest centre, or colour each LSOA by whether it's within a certain travel time of its nearest centre using the buttons above the map.
-<br><br>
-> "One thing to flag," they add, nodding at the blue pins. "Those colours are all worked out from the sites open today. Clicking a candidate pin just tells us which one you'd pick - it doesn't show you what travel times would look like if it were actually built."
-<br><br>
-> They scurry off quickly before you can ask any further questions, muttering something about needing to reticulate some splines.
-<br><br>
-> The map looms large on your screen. You must explore it yourself.
+> They scurry off before you can ask any further questions, muttering something about needing to reticulate some splines.
 """
 
 # Once a decision has been made on this page, drop the analyst intro (and its

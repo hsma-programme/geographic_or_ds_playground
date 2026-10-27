@@ -19,13 +19,9 @@ st.title("Demand & Deprivation Hotspots")
 hotspots_gdf = load_demand_deprivation_hotspots()
 
 intro_text = """
-> Your analyst has taken the two maps you asked for - demand and deprivation - and combined them into one.
+> Your analyst has combined demand and deprivation into one map. On its own, a busy area or a deprived area is only half the story - what matters is the places that are *both*.
 <br><br>
-> They explain that on their own, a busy area or a deprived area is only half the story. What you really want are the places that are *both*: high demand and high deprivation together.
-<br><br>
-> They tell you to use the buttons above the map to switch views. "Priority typology" grades every area low, medium or high on demand and on deprivation - only the areas that are high on *both* show up red. Areas that are only high on one, or sit in the middle on both, show up grey: worth a second look, not a five-alarm fire. "Statistical hotspots" is fussier still: it only lights up clusters that are unlikely to be down to chance.
-<br><br>
-> They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
+> Red areas are high on both. Grey areas are high on only one, or middling on both: worth a second look, not a five-alarm fire. The "statistical hotspots" view is fussier still - it only lights up clusters that are unlikely to be down to chance.
 <br><br>
 > They mutter something about "Moran's I" and "spatial autocorrelation", notice you have stopped listening, and retreat to the safety of their spreadsheet.
 """
@@ -39,7 +35,7 @@ if not st.session_state.site_submitted_demand_deprivation_hotspots:
     )
     st.iframe(
         Path("app/assets/terminal_working/demand_deprivation_hotspots.html"),
-        height=375,
+        height=275,
     )
     render_prior_choice_recap(HOTSPOTS_DEMAND_DEPRIVATION)
 

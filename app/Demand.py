@@ -17,7 +17,7 @@ page_styling()
 st.title("Demand")
 
 intro_text = """
-> Your analyst has delivered a map of the population aged 50-84 - the people most likely to need a CDC. Yellow areas have the most people, purple the fewest. Hover over an area to see its exact count.
+> Your analyst has delivered a map of the population aged 50-84 - the people you've been asked to prioritise. Yellow areas have the most people, purple the fewest. Hover over an area to see its exact count.
 <br><br>
 > The analyst then becomes pixellated and returns to the cloud until they are next required.
 <br><br>

@@ -19,15 +19,9 @@ st.title("Who Can Actually Reach a CDC? (by public transport)")
 problem = setup_lokigi_site_problem_2sfca_pt()
 
 intro_text = """
-> "Same calculation, different assumption," your analyst says. "This time, nobody's driving."
+> "Same calculation, but nobody's driving," your analyst says. "Capacity, competition and travel time rolled into one - with buses and trains this time. For a lot of Devon, that changes everything."
 <br><br>
-> "It's the same two-step floating catchment area score as before - capacity, competition and travel distance rolled into one - but the travel times now come from buses and trains rather than cars. For a lot of Devon, that changes everything."
-<br><br>
-> "Watch how much more of the map turns red. A patient without a car might live the same number of miles from a CDC as their neighbour, but a missing bus route can put it effectively out of reach. These are often exactly the people who can least afford a taxi or a day off work."
-<br><br>
-> "Same catch as the car version," they add. "This is all worked out from the four CDCs open today - the candidate pins are there for you to choose from, not to show what adding one would do."
-<br><br>
-> "The travel limits above are longer than the car version on purpose - public transport journeys simply take more time. Try a few, and see whose access quietly disappears."
+> "Watch how much more of the map turns red. A patient without a car can live as close to a CDC as their neighbour and still be cut off by a missing bus route - and these are often the people who can least afford a taxi or a day off work."
 <br><br>
 > They gesture at the map and fall silent, letting it make the argument for them.
 """
@@ -39,7 +33,7 @@ if not st.session_state.site_submitted_2sfca_pt:
         intro_text,
         output_path="app/assets/terminal_working/2sfca_pt.html",
     )
-    st.iframe(Path("app/assets/terminal_working/2sfca_pt.html"), height=400)
+    st.iframe(Path("app/assets/terminal_working/2sfca_pt.html"), height=300)
     render_prior_choice_recap(TWO_SFCA_PT)
 
 # The proposed (blue) markers on this map remain clickable and drive the site

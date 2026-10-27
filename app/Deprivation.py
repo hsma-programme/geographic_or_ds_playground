@@ -17,12 +17,10 @@ page_styling()
 st.title("Deprivation")
 
 intro_text = """
-    <br><br>
-
     You know that it has been found that people in more deprived areas often have
     significantly higher mortality rates and poorer screening uptake.
     <br><br>
-    You ask your analyst to show deprivation and they deliver following map, but do not offer any interpretation.
+    You ask your analyst to show deprivation and they deliver the following map, but do not offer any interpretation.
     <br><br>
     You turn around and they are gone. You are on your own.
     """

@@ -19,15 +19,11 @@ st.title("Demand & Travel Hotspots")
 hotspots_gdf = load_demand_travel_hotspots()
 
 intro_text = """
-> Your analyst has combined two of the maps you have already seen - where the demand is, and how long it takes to drive to the nearest existing CDC.
+> Your analyst has combined demand with car travel time to today's four CDCs. A long drive only really matters where lots of people need the service: an empty moor with a two-hour drive is less of a worry than a busy town that is still awkward to reach.
 <br><br>
-> They explain that a long drive only really matters where lots of people need the service. An empty moor with a two-hour drive is less of a worry than a busy town that is still awkward to reach.
+> Red areas have high demand *and* poor access. Grey areas have only one of the two: a mixed picture, not the worst case. The "statistical hotspots" view only lights up clusters unlikely to be down to chance.
 <br><br>
-> They tell you to use the buttons above the map to switch views. "Priority typology" grades every area low, medium or high on demand and on access - only the areas with high demand *and* poor access show up red. An area with high demand but only middling access, or poor access but low demand, shows up grey: a mixed picture, not the worst case. "Statistical hotspots" only lights up clusters of high-demand, poor-access areas that are unlikely to be down to chance.
-<br><br>
-> They remind you that you can still hover over the red and blue markers to see the CDCs, and click a blue one to make your recommendation.
-<br><br>
-> They add, a little pointedly, that these travel times are to the *existing* four CDCs - the whole point of this exercise is to work out where a fifth might help most.
+> They add, a little pointedly, that the whole point of this exercise is to work out where a fifth CDC might help most.
 """
 
 # Once a decision has been made on this page, drop the analyst intro so a
@@ -38,7 +34,7 @@ if not st.session_state.site_submitted_demand_travel_hotspots:
         output_path="app/assets/terminal_working/demand_travel_hotspots.html",
     )
     st.iframe(
-        Path("app/assets/terminal_working/demand_travel_hotspots.html"), height=375
+        Path("app/assets/terminal_working/demand_travel_hotspots.html"), height=275
     )
     render_prior_choice_recap(HOTSPOTS_DEMAND_TRAVEL)
 

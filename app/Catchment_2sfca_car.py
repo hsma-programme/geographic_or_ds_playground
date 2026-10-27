@@ -19,17 +19,11 @@ st.title("Who Can Actually Reach a CDC? (by car)")
 problem = setup_lokigi_site_problem_2sfca_car()
 
 intro_text = """
-> "Travel time only tells you half the story," your analyst says, sliding a single map across the desk. "This one puts three things together at once."
+> "Travel time only tells you half the story," your analyst says. "This map also counts how much capacity each CDC has, and how many people are competing for it. Analysts call it a two-step floating catchment area, or 2SFCA. Think of it as 'slots per person, once you count everyone queueing ahead of you'."
 <br><br>
-> "It takes how much capacity each CDC has, how many people can reach it, and how far away it is - and works out how much diagnostic capacity is realistically available to the people living in each area. Analysts call it a two-step floating catchment area, or 2SFCA. You can think of it as 'slots per person, once you account for everyone queueing ahead of them'."
+> "The thing to notice: two areas the same distance from a CDC can end up very different colours, if one is sharing it with far more people."
 <br><br>
-> "Blue areas are comfortably served. Red areas are stretched thin - and the deepest red areas can't reach any CDC at all within the travel limit. The clever part: two neighbourhoods the same distance from a CDC can still end up very different colours, if one of them is sharing that centre with far more people."
-<br><br>
-> "One catch," they add, glancing at the blue pins. "This is all worked out from the four CDCs open today. Clicking a candidate pin doesn't add its capacity in - it just tells us which one you'd pick."
-<br><br>
-> "Use the buttons above the map to change how far you assume people are willing to drive. Then see who gets left behind."
-<br><br>
-> They leave the map with you and quietly refill their coffee.
+> They leave the map with you and quietly refill their coffee. You could swear their mug has tripled in size.
 """
 
 # Once a decision has been made on this page, drop the analyst intro so a
@@ -39,7 +33,7 @@ if not st.session_state.site_submitted_2sfca_car:
         intro_text,
         output_path="app/assets/terminal_working/2sfca_car.html",
     )
-    st.iframe(Path("app/assets/terminal_working/2sfca_car.html"), height=400)
+    st.iframe(Path("app/assets/terminal_working/2sfca_car.html"), height=300)
     render_prior_choice_recap(TWO_SFCA_CAR)
 
 # The proposed (blue) markers on this map remain clickable and drive the site
