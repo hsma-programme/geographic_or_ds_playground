@@ -855,14 +855,14 @@ def render_travel_maps(best_solution_gdf):
         "Select map type",
         [
             "Show travel time",
-            "Show nearest centre",
+            "Show current nearest centre",
             "Show regions exceeding a certain travel time",
         ],
     )
 
     if map_selection == "Show travel time":
         return render_travel_existing_map(best_solution_gdf, what="time")
-    elif map_selection == "Show nearest centre":
+    elif map_selection == "Show current nearest centre":
         return render_travel_existing_map(best_solution_gdf, what="centre")
     elif map_selection == "Show regions exceeding a certain travel time":
         threshold = st.slider(
