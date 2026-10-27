@@ -17,6 +17,8 @@ st.title("Current CDC Utilisation")
 intro_text = """
 > Your analyst returns with two maps. On the left, the four existing CDCs: blue centres have spare capacity, red ones are at or beyond it, and bigger circles are busier. On the right, where the people aged 50-84 live.
 <br><br>
+> They have ten other analyses to complete today, so have not had time to add their interpretation.
+<br><br>
 > "Read them together," they suggest. "A full centre next to lots of demand is a very different problem from a quiet centre in an empty area."
 <br><br>
 > They dissolve into a cloud of static, leaving you to interpret the maps.
@@ -29,7 +31,7 @@ if not st.session_state.site_submitted_utilisation:
         intro_text,
         output_path="app/assets/terminal_working/utilisation.html",
     )
-    st.iframe(Path("app/assets/terminal_working/utilisation.html"), height=250)
+    st.iframe(Path("app/assets/terminal_working/utilisation.html"), height=275)
     render_prior_choice_recap(UTILISATION)
 
 utilisation_selection_map = make_selection_map(render_utilisation_map, "utilisation")
