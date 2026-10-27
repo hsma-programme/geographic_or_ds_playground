@@ -1129,7 +1129,8 @@ def write_terminal_html(
 </body>
 </html>"""
 
-    with open(output_path, "w") as f:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     return len(text), reveal_speed_ms
