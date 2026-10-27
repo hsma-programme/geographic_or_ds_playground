@@ -41,7 +41,15 @@ if not st.session_state.site_submitted_deprivation:
     st.iframe(Path("app/assets/terminal_working/deprivation_page.html"))
     render_prior_choice_recap(DEPRIVATION)
 
-select_map = make_selection_map(render_deprivation_map, "deprivation")
+select_map = make_selection_map(
+    render_deprivation_map,
+    "deprivation",
+    instruction=(
+        "Click a blue pin to choose a site. The red pins are the existing CDCs. "
+        "This map shows deprivation everywhere - not just in the areas that "
+        "currently struggle to reach a CDC."
+    ),
+)
 select_map()
 
 if st.session_state.site_submitted_deprivation:

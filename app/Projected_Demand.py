@@ -31,7 +31,13 @@ if not st.session_state.site_submitted_projected_demand:
     render_prior_choice_recap(PROJECTED_DEMAND)
 
 projected_demand_selection_map = make_selection_map(
-    render_projected_demand_map, "projected_demand"
+    render_projected_demand_map,
+    "projected_demand",
+    instruction=(
+        "Click a blue pin to choose a site. The red pins are the existing CDCs. "
+        "This map shows raw projected demand - everyone aged 50-84 in 10 years' "
+        "time, not just the demand today's CDCs wouldn't meet."
+    ),
 )
 projected_demand_selection_map()
 

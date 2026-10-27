@@ -1085,7 +1085,20 @@ def render_deprivation_travel_hotspots_maps(hotspots_gdf):
 ###############################
 # MARK: Site selection wrapper
 ###############################
-def make_selection_map(map_render_fn, key_suffix):
+DEFAULT_SELECTION_INSTRUCTION = (
+    "Click a blue pin to choose a site. This map shows today's four CDCs "
+    "only - picking a pin doesn't redraw it to show what the new site "
+    "would change."
+)
+
+
+def make_selection_map(
+    map_render_fn, key_suffix, instruction=DEFAULT_SELECTION_INSTRUCTION
+):
+    """`instruction` is the info box shown above the map. Pages whose map
+    doesn't depend on the CDC network at all (e.g. raw demand) pass their own,
+    since "this only shows today's CDCs" is a confusing caveat there."""
+
     @st.fragment
     def selection_map():
         confirmed_key = f"confirmed_site_{key_suffix}"
@@ -1101,15 +1114,10 @@ def make_selection_map(map_render_fn, key_suffix):
             return
 
         # Above the map rather than below it, so it's read before the first
-        # click and stays visible after one. The caveat is true of every map
-        # in the evidence pool - none of them model the new site - so it lives
-        # here once rather than in each page's analyst intro.
-        st.info(
-            "Click a blue pin to choose a site. This map shows today's four CDCs "
-            "only - picking a pin doesn't redraw it to show what the new site "
-            "would change.",
-            icon=":material/touch_app:",
-        )
+        # click and stays visible after one. The default caveat is true of
+        # every map in the evidence pool - none of them model the new site - so
+        # it lives here once rather than in each page's analyst intro.
+        st.info(instruction, icon=":material/touch_app:")
 
         st_data = map_render_fn()
 

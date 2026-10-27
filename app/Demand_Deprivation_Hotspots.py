@@ -42,6 +42,11 @@ if not st.session_state.site_submitted_demand_deprivation_hotspots:
 hotspots_selection_map = make_selection_map(
     partial(render_demand_deprivation_hotspots_maps, hotspots_gdf),
     "demand_deprivation_hotspots",
+    instruction=(
+        "Click a blue pin to choose a site. The red pins are the existing CDCs. "
+        "This map combines raw demand and deprivation - it doesn't take into "
+        "account who can already reach a CDC easily."
+    ),
 )
 hotspots_selection_map()
 

@@ -51,7 +51,15 @@ if not st.session_state.site_submitted_demand:
 
     render_prior_choice_recap(DEMAND)
 
-demand_selection_map = make_selection_map(render_demand_map, "demand")
+demand_selection_map = make_selection_map(
+    render_demand_map,
+    "demand",
+    instruction=(
+        "Click a blue pin to choose a site. The red pins are the existing CDCs. "
+        "This map shows raw demand - everyone aged 50-84, not just the demand "
+        "that isn't currently being met."
+    ),
+)
 demand_selection_map()
 
 if st.session_state.site_submitted_demand:
