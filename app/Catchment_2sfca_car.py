@@ -1,9 +1,11 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
     setup_lokigi_site_problem_2sfca_car,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import TWO_SFCA_CAR
 from app.maps import render_2sfca_map, make_selection_map
@@ -37,7 +39,8 @@ if not st.session_state.site_submitted_2sfca_car:
         intro_text,
         output_path="app/assets/terminal_working/2sfca_car.html",
     )
-    st.iframe("app/assets/terminal_working/2sfca_car.html", height=400)
+    st.iframe(Path("app/assets/terminal_working/2sfca_car.html"), height=400)
+    render_prior_choice_recap(TWO_SFCA_CAR)
 
 # The proposed (blue) markers on this map remain clickable and drive the site
 # selection; render_2sfca_map returns the st_folium result for that flow.

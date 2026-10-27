@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import write_terminal_html, page_styling
 
@@ -22,7 +23,7 @@ char_count, reveal_speed = write_terminal_html(
     output_path="app/assets/terminal_working/aha.html",
 )
 
-st.iframe("app/assets/terminal_working/aha.html", height=275)
+st.iframe(Path("app/assets/terminal_working/aha.html"), height=275)
 
 if st.button(
     "Click to boot the optimiser!",

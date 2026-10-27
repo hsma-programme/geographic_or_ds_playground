@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
@@ -7,6 +8,7 @@ from app.utils import (
     load_population_weighted_centroids,
     TERMINAL_DEFAULT_SPEED,
     write_terminal_html,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import TRAVEL_CAR
 from app.maps import render_travel_maps, make_selection_map
@@ -54,7 +56,8 @@ if not st.session_state.site_submitted_car_travel:
         reveal_speed_ms=TERMINAL_DEFAULT_SPEED,
     )
 
-    st.iframe("app/assets/terminal_working/travel_car.html")
+    st.iframe(Path("app/assets/terminal_working/travel_car.html"))
+    render_prior_choice_recap(TRAVEL_CAR)
 
 # Note the session key doesn't follow the name of the page as the automated rules would
 # make it display weirdly

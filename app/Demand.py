@@ -1,9 +1,11 @@
+from pathlib import Path
 import streamlit as st
 from app.utils import (
     render_navigation,
     write_terminal_html,
     page_styling,
     select_site_from_current_evidence,
+    render_prior_choice_recap,
 )
 from app.utils_investigations import DEMAND
 from app.maps import render_demand_map, make_selection_map
@@ -32,7 +34,8 @@ if not st.session_state.site_submitted_demand:
         intro_text,
         output_path="app/assets/terminal_working/demand.html",
     )
-    st.iframe("app/assets/terminal_working/demand.html", height=300)
+    st.iframe(Path("app/assets/terminal_working/demand.html"), height=350)
+    render_prior_choice_recap(DEMAND)
 
 demand_selection_map = make_selection_map(render_demand_map, "demand")
 demand_selection_map()

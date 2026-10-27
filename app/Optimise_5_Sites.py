@@ -2,14 +2,23 @@ import streamlit as st
 from app.utils import (
     page_styling,
     load_devon_sites,
+    solution_panel_figure,
+    shared_map_bbox,
     RANK_METRIC_ASCENDING,
     RANK_METRIC_LABELS,
+    RANK_METRIC_PANEL_CAPTION,
+    SOLUTION_COMPARISON_METRICS,
+    PARETO_METRICS,
+    metric_spreads,
+    objective_champions,
+    compromise_options,
+    get_solution_rank,
+    render_objective_champions,
+    render_ordinal_rank_summary,
 )
 import time
 from PIL import Image
-import pandas as pd
 import pickle
-from lokigi.multiobjective import ParetoMetric
 
 st.set_page_config(initial_sidebar_state="expanded", layout="wide")
 page_styling()
@@ -96,12 +105,10 @@ if run:
 # and forcing a full re-watch of the spinner/GIF theatre above just to see
 # them again. The animation itself only ever plays once, inside `if run:`.
 if st.session_state.get("optimise_5_sites_ran"):
-    best_combo = solution.return_best_combination_site_names()
-    best_additional = [i for i in best_combo if i not in existing_sites]
-
-    st.success(
-        f"Based on the impact on weighted average travel time alone, the optimiser finds the best additional site to be {best_additional[0]}."
-    )
+    # Computed here, before anything is rendered, so the shortlist below and
+    # the plots in tabs 2-3 all read from the same is_pareto_optimal /
+    # dominated_by columns rather than tab 2 computing them again later.
+    solution.compute_pareto_front(metrics=PARETO_METRICS)
 
     solution_df_display = (
         solution.solution_df.copy()
@@ -125,70 +132,57 @@ if st.session_state.get("optimise_5_sites_ran"):
         lambda x: [i for i in x if i not in existing_sites][0]
     )
 
-    def ordinal(n: int) -> str:
-        """Convert an integer to its ordinal representation."""
-        if 10 <= n % 100 <= 20:
-            suffix = "th"
-        else:
-            suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-        return f"{n}{suffix}"
+    champions = objective_champions(solution_df_ranking, site_col="site")
+    spreads = metric_spreads(solution_df_ranking)
+    compromises = compromise_options(solution_df_ranking, site_col="site")
+    n_total = len(solution_df_ranking)
+    n_front = int(solution_df_ranking["is_pareto_optimal"].sum())
 
-    def get_solution_rank(
-        solution_df: pd.DataFrame,
-        selected_site: str,
-        metric: str,
-        ascending: bool = False,
-    ) -> int:
-        """
-        Return the 1-based rank of a site for a given metric.
-        """
-        sorted_df = solution_df.sort_values(metric, ascending=ascending).reset_index(
-            drop=True
+    st.markdown(
+        f"The optimiser compared all **{n_total}** possible combinations against "
+        f"**{len(PARETO_METRICS)}** different measures. **{n_front} of them are "
+        "defensible** - nothing else beats them across the board. Each is the "
+        "best answer to a different question."
+    )
+
+    render_objective_champions(champions, spreads, compromises, n_total)
+
+    champion_sites = {c["site"] for c in champions}
+    selected_row = solution_df_ranking[solution_df_ranking["site"] == selected_site].iloc[0]
+
+    if selected_site in champion_sites:
+        selected_badges = next(
+            c["badges"] for c in champions if c["site"] == selected_site
+        )
+        st.info(
+            f"Your choice, **{selected_site}**, is one of the shortlisted options above - "
+            f"it's best for {', '.join(selected_badges)}."
+        )
+    elif selected_row["is_pareto_optimal"]:
+        st.info(
+            f"Your choice, **{selected_site}**, is on the shortlist of defensible options - "
+            "nothing beats it across the board - but it isn't the best at any single measure."
+        )
+    else:
+        n_dominators = len(selected_row["dominated_by"])
+        st.warning(
+            f"Your choice, **{selected_site}**, is beaten outright by "
+            f"{n_dominators} other combination{'s' if n_dominators != 1 else ''} - "
+            "at least one alternative does at least as well on every measure, and "
+            "better on some."
         )
 
-        matches = sorted_df.index[sorted_df["site"] == selected_site]
+    st.divider()
 
-        if len(matches) == 0:
-            raise ValueError(f"'{selected_site}' not found in dataframe.")
-
-        return matches[0] + 1
-
-    weighted = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "weighted_average", ascending=True
-        )
-    )
-    average = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "unweighted_average", ascending=True
-        )
-    )
-    p90 = ordinal(
-        get_solution_rank(
-            solution_df_ranking, selected_site, "90th_percentile", ascending=True
-        )
-    )
-    maximum = ordinal(
-        get_solution_rank(solution_df_ranking, selected_site, "max", ascending=True)
-    )
-    coverage = ordinal(
-        get_solution_rank(
+    render_ordinal_rank_summary(
+        lambda metric: get_solution_rank(
             solution_df_ranking,
             selected_site,
-            "proportion_within_coverage_threshold",
-            ascending=False,
+            metric,
+            ascending=RANK_METRIC_ASCENDING[metric],
         )
     )
 
-    st.markdown(f"""
-Your solution is the:
-
-- **{weighted}** best in terms of weighted average car travel time.
-- **{average}** best in terms of **un**weighted average car travel time.
-- **{p90}** best in terms of 90th percentile car travel time.
-- **{maximum}** best in terms of maximum car travel time.
-- **{coverage}** best in terms of the demand covered within 30 minutes of a site by car.
-""")
     tab_1, tab_2, tab_3, tab_4 = st.tabs(
         [
             "Solution Comparison",
@@ -202,46 +196,54 @@ Your solution is the:
 
         @st.fragment
         def plot_best_sols():
-            rank_on = st.radio(
+            sort_by = st.radio(
                 "Rank On...",
-                [
-                    "weighted_average",
-                    "unweighted_average",
-                    "90th_percentile",
-                    "max",
-                    "proportion_within_coverage_threshold",
-                    "inter_tertile_ratio",
-                ],
+                SOLUTION_COMPARISON_METRICS,
                 format_func=lambda m: RANK_METRIC_LABELS[m].capitalize(),
                 horizontal=True,
             )
-            col1, col2 = st.columns(2)
+            # Both figures are built before either is rendered, so they can
+            # be cropped to a single shared box and come out the same size -
+            # see shared_map_bbox(). solution_panel_figure() picks the plot
+            # that answers the selected metric (a travel-time map for most, an
+            # improvement map, a before/after distribution or a 45-minute
+            # threshold map for the three it can't answer) and titles it.
+            fig_best = solution_panel_figure(solution, sort_by, 1)
+            fig_yours = solution_panel_figure(
+                solution,
+                sort_by,
+                get_solution_rank(
+                    solution_df_ranking,
+                    selected_site,
+                    sort_by,
+                    ascending=RANK_METRIC_ASCENDING[sort_by],
+                ),
+            )
+            map_bbox = shared_map_bbox(fig_best, fig_yours)
 
-            with col1:
-                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[rank_on]}")
-                ax = solution.plot_best_combination(
-                    solution_rank=1,
-                    rank_on=rank_on,
-                    plot_regions_not_meeting_threshold=True
-                    if rank_on == "proportion_within_coverage_threshold"
-                    else False,
-                )
-                st.pyplot(ax.figure)
-            with col2:
+            # Headings and maps go in two separate column rows, not one row
+            # of heading-then-map. The two headings are wildly different
+            # lengths ("Best Solution Based on weighted average travel time"
+            # wraps to three lines in the display font where "Your Selected
+            # Solution" fits on one), and inside a single row that pushed one
+            # map down by the difference. As its own row, the heading block
+            # takes the height of the taller heading and both maps start
+            # underneath it - no assumption about how many lines either wraps
+            # to.
+            head_1, head_2 = st.columns(2)
+            with head_1:
+                st.subheader(f"Best Solution Based on {RANK_METRIC_LABELS[sort_by]}")
+            with head_2:
                 st.subheader("Your Selected Solution")
-                ax = solution.plot_best_combination(
-                    solution_rank=get_solution_rank(
-                        solution_df_ranking,
-                        selected_site,
-                        rank_on,
-                        ascending=RANK_METRIC_ASCENDING[rank_on],
-                    ),
-                    plot_regions_not_meeting_threshold=True
-                    if rank_on == "proportion_within_coverage_threshold"
-                    else False,
-                    rank_on=rank_on,
-                )
-                st.pyplot(ax.figure)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.pyplot(fig_best, bbox_inches=map_bbox)
+            with col2:
+                st.pyplot(fig_yours, bbox_inches=map_bbox)
+
+            if sort_by in RANK_METRIC_PANEL_CAPTION:
+                st.caption(RANK_METRIC_PANEL_CAPTION[sort_by])
 
         plot_best_sols()
 
@@ -255,6 +257,7 @@ Your solution is the:
         display_columns = [
             "solution_rank",
             "site",
+            "is_pareto_optimal",
             "weighted_average",
             "unweighted_average",
             "90th_percentile",
@@ -263,6 +266,11 @@ Your solution is the:
             "inter_tertile_ratio",
             "avg_lower_third_bins",
             "avg_upper_third_bins",
+            "demand_improved",
+            "proportion_demand_improved",
+            "mean_reduction_among_improved",
+            "demand_beyond_threshold_45",
+            "demand_beyond_threshold_60",
         ]
         st.dataframe(
             solution_df_display[display_columns],
@@ -275,6 +283,10 @@ Your solution is the:
                 ),
                 "site": st.column_config.TextColumn(
                     "Site(s)",
+                ),
+                "is_pareto_optimal": st.column_config.CheckboxColumn(
+                    "Defensible?",
+                    help="Nothing else in this list beats it across every measure at once.",
                 ),
                 "weighted_average": st.column_config.NumberColumn(
                     "Weighted average (mins)",
@@ -294,7 +306,7 @@ Your solution is the:
                 ),
                 "proportion_within_coverage_threshold": st.column_config.NumberColumn(
                     "Coverage (%)",
-                    format="%.1f",
+                    format="percent",
                 ),
                 "inter_tertile_ratio": st.column_config.NumberColumn(
                     "Inter-tertile ratio",
@@ -308,49 +320,42 @@ Your solution is the:
                     "Average Car Travel (highest third)",
                     format="%.1f",
                 ),
+                "demand_improved": st.column_config.NumberColumn(
+                    "People with a shorter journey",
+                    format="%.0f",
+                ),
+                "proportion_demand_improved": st.column_config.NumberColumn(
+                    "Share with a shorter journey (%)",
+                    format="percent",
+                ),
+                "mean_reduction_among_improved": st.column_config.NumberColumn(
+                    "Avg. minutes saved for those who benefit",
+                    format="%.1f",
+                ),
+                "demand_beyond_threshold_45": st.column_config.NumberColumn(
+                    "Still >45 min away",
+                    format="%.0f",
+                ),
+                "demand_beyond_threshold_60": st.column_config.NumberColumn(
+                    "Still >60 min away",
+                    format="%.0f",
+                ),
             },
         )
 
     with tab_2:
         st.subheader("Comparing the best solutions across multiple metrics")
 
-        metrics = [
-            ParetoMetric(
-                column="weighted_average",
-                direction="lower_better",
-                label="weighted average travel time",
-                unit="minutes",
-            ),
-            ParetoMetric(
-                column="max",
-                direction="lower_better",
-                label="maximum travel time",
-                unit="minutes",
-            ),
-            ParetoMetric(
-                column="proportion_within_coverage_threshold",
-                direction="higher_better",
-                label="proportion within coverage threshold",
-            ),
-            ParetoMetric(
-                column="inter_tertile_ratio",
-                direction="lower_better",
-                label="ratio of weighted travel times in IMD 1-3 to IMD 7-10",
-            ),
-            ParetoMetric(
-                column="avg_lower_third_bins",
-                direction="lower_better",
-                label="average travel time for those in IMD 1-3",
-                unit="minutes",
-            ),
-        ]
-
-        solution.compute_pareto_front(metrics=metrics)
-
+        # Pareto front already computed above, on the same PARETO_METRICS used
+        # for the objective-champion shortlist, so this plots exactly what
+        # produced that shortlist rather than a separately-defined metric set.
         st.pyplot(solution.plot_pareto_summary(width_multiplier=3))
 
         st.caption(
-            "An inter-tertile ratio of below 1 means those in IMD 1-3 (most deprived) have a shorter travel time on average than those in IMD 7-10 (least deprived)"
+            "An inter-tertile ratio below 1 means those in IMD 1-3 (most deprived) travel "
+            "less on average than those in IMD 8-10 (least deprived). This tool scores lower "
+            "as always better here - a deliberate choice to reward actively cutting travel "
+            "times for the most deprived group, not just narrowing the gap to zero."
         )
 
     with tab_3:
@@ -363,11 +368,10 @@ Your solution is the:
         st.pyplot(solution.plot_pareto_facets())
 
     st.divider()
-    st.subheader("But wait...")
     if st.button(
-        "Yet another person runs into the room...",
-        key="btn_continue_optimise_6",
-        icon=":material/celebration:",
+        "See who actually benefits",
+        key="btn_continue_who_benefits",
+        icon=":material/query_stats:",
         width="stretch",
     ):
-        st.switch_page("app/Optimise_6_Sites.py")
+        st.switch_page("app/Who_Benefits.py")

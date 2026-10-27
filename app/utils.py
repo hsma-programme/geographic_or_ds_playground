@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import streamlit as st
 import geopandas
 import html
@@ -10,10 +11,23 @@ from io import BytesIO
 from pathlib import Path
 import os
 from lokigi.site import SiteProblem
+from lokigi.site_solutions import SolutionComparator
+from lokigi.multiobjective import Metric
+from matplotlib.transforms import Bbox
+from matplotlib.colors import ListedColormap
+import matplotlib.pyplot as plt
 
 TERMINAL_DEFAULT_SPEED = 10
 TERMINAL_COLOUR = "yellow"
 MAXIMUM_BRIEFINGS = 6
+
+# What counts as a "meaningfully" shorter journey when comparing a candidate
+# network against today's. 5 minutes, not 0 - at 0 the metric degenerates into
+# "everyone who would switch to the new site", which is a catchment headcount
+# dressed up as an improvement measure.
+MEANINGFUL_CHANGE_MINUTES = 5.0
+COVERAGE_THRESHOLD_MINUTES = 30
+LEFT_BEHIND_THRESHOLDS = [45, 60]
 
 # Shared basemap for every folium/leaflet map in the app, so switching styles
 # only requires changing this one value. CartoDB Voyager keeps roads/labels
@@ -33,6 +47,9 @@ RANK_METRIC_ASCENDING = {
     "max": True,
     "proportion_within_coverage_threshold": False,
     "inter_tertile_ratio": True,
+    "proportion_demand_improved": False,
+    "mean_reduction_among_improved": False,
+    "demand_beyond_threshold_45": True,
 }
 
 # Human-readable phrasing for each optimiser metric column, for embedding in
@@ -45,9 +62,793 @@ RANK_METRIC_LABELS = {
     "unweighted_average": "unweighted average travel time",
     "90th_percentile": "90th percentile travel time",
     "max": "maximum travel time",
-    "proportion_within_coverage_threshold": "coverage within the travel time threshold",
+    # Names the actual cutoff rather than "the travel time threshold": this
+    # metric and demand_beyond_threshold_45 below are both threshold measures
+    # and both draw a two-colour map, so without the numbers in the labels the
+    # only thing telling them apart on screen is which map is on the tab.
+    "proportion_within_coverage_threshold": (
+        f"coverage within {COVERAGE_THRESHOLD_MINUTES} minutes"
+    ),
     "inter_tertile_ratio": "equity (inter-tertile ratio)",
+    "proportion_demand_improved": "people with a meaningfully shorter journey",
+    "mean_reduction_among_improved": "minutes saved for those who benefit",
+    "demand_beyond_threshold_45": "people still more than 45 minutes away",
 }
+
+# How each "rank on" metric's own value should read in a plot title, keyed by
+# the same columns as RANK_METRIC_LABELS above. Each formatter takes one row
+# of solution_df and returns just the value part of the line.
+#
+# These exist because lokigi's default plot title can't report the metric the
+# Optimise pages' radio actually selected: it reports SiteSolutionSet.
+# ranking_metric, the Metric frozen into the pickle by solve(rank_on=...), so
+# every title read "Ranked on Proportion demand improved: 0.1" no matter what
+# the user picked - a raw 0-1 proportion at 1dp, for a metric they hadn't
+# chosen. See best_combination_title() below.
+#
+# Plain formatters rather than more lokigi Metric objects (as in
+# PARETO_METRICS) because Metric.format_value() renders a headcount as
+# "49306" - no thousands separator, which is exactly what makes a
+# population number hard to read at a glance.
+#
+# Proportions carry their absolute headcount alongside them: "10.0%" of Devon
+# is a number nobody can act on until it's also "52,140 people".
+RANK_METRIC_TITLE_VALUE = {
+    "weighted_average": lambda row: f"{row['weighted_average']:.1f} minutes",
+    "unweighted_average": lambda row: f"{row['unweighted_average']:.1f} minutes",
+    "90th_percentile": lambda row: f"{row['90th_percentile']:.1f} minutes",
+    "max": lambda row: f"{row['max']:.1f} minutes",
+    "proportion_within_coverage_threshold": lambda row: (
+        f"{row['proportion_within_coverage_threshold']:.1%} "
+        f"({row['demand_within_coverage_threshold']:,.0f} people)"
+    ),
+    "inter_tertile_ratio": lambda row: f"{row['inter_tertile_ratio']:.2f}",
+    "proportion_demand_improved": lambda row: (
+        f"{row['proportion_demand_improved']:.1%} "
+        f"({row['demand_improved']:,.0f} people)"
+    ),
+    "mean_reduction_among_improved": lambda row: (
+        f"{row['mean_reduction_among_improved']:.1f} minutes"
+    ),
+    "demand_beyond_threshold_45": lambda row: (
+        f"{row['demand_beyond_threshold_45']:,.0f} people"
+    ),
+}
+
+
+# Order of the "Rank On..." radio on the Solution Comparison tab, shared by
+# both Optimise pages. Deliberately not RANK_METRIC_LABELS' own order: the two
+# threshold measures sit next to each other, so the reader meets "coverage
+# within 30 minutes" and "people still more than 45 minutes away" as an
+# obvious pair of related questions rather than stumbling on the second one
+# four options later and taking it for a repeat of the first.
+SOLUTION_COMPARISON_METRICS = [
+    "weighted_average",
+    "unweighted_average",
+    "90th_percentile",
+    "max",
+    "proportion_within_coverage_threshold",
+    f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}",
+    "inter_tertile_ratio",
+    "proportion_demand_improved",
+    "mean_reduction_among_improved",
+]
+
+# Columns summarised in the "your solution is the Nth best..." bullet list on
+# each Optimise page. A deliberate subset of RANK_METRIC_LABELS - narrower
+# than the tab-1 "rank on" radio (which also offers inter_tertile_ratio and
+# mean_reduction_among_improved) because this bullet list is meant to be
+# skimmed as one paragraph, not read as a full menu of every measure the
+# optimiser can rank on.
+ORDINAL_RANK_SUMMARY_METRICS = [
+    "weighted_average",
+    "unweighted_average",
+    "90th_percentile",
+    "max",
+    "proportion_within_coverage_threshold",
+    "proportion_demand_improved",
+    "demand_beyond_threshold_45",
+]
+
+# The multi-objective metric set used on the Optimise pages, both for the
+# lokigi Pareto-front computation and for the objective-champion shortlist
+# that replaces a single "best on weighted average travel time" headline.
+# Defined once here rather than copy-pasted per page so the two Optimise
+# pages and the shortlist helpers below always agree on what "an objective"
+# means.
+#
+# weighted_average stays in deliberately: the page becomes a story about it
+# losing an argument to the other measures, not about it being quietly
+# dropped. max and proportion_within_coverage_threshold are not - they
+# remain available on the tab-1 "rank on" radio and in the results table,
+# but a p-median average and a threshold count don't tell you anything about
+# *how many people* actually benefit, which is the point of this shortlist.
+#
+# proportion_demand_improved (people with a meaningfully shorter journey,
+# see MEANINGFUL_CHANGE_MINUTES) is the replacement headline: it and
+# weighted_average can and do disagree, because a site can shave a little
+# off everyone's average while changing almost nobody's actual journey.
+#
+# mean_reduction_among_improved (minutes saved for those who benefit) is
+# deliberately left OUT of this Pareto set, though it's still offered on the
+# tab-1 radio and shown in the results table. Including it pushes the
+# defensible shortlist to 9/14 on the 5-site solution and 24/91 on the
+# 6-site one - too large a fraction of the field to read as a punchy "these
+# are the contenders" shortlist. Dropping it gives a tighter 3/14 and 4/91
+# (re-verified against the pickles regenerated under lokigi 0.9.1).
+#
+# inter_tertile_ratio is deliberately scored "lower is better", not "closest
+# to 1.0" - this is a stance, not just a modelling default. It rewards
+# actively reducing travel time for the most deprived group relative to the
+# least deprived (progressive universalism), rather than treating perfect
+# evenness as the ideal. Scoring it against a target of 1.0 instead would
+# both change which options make the shortlist and loosen the Pareto front
+# considerably (verified under 0.9.1: 8/14 vs 3/14 on the 5-site solution,
+# 26/91 vs 4/91 on the 6-site one).
+PARETO_METRICS = [
+    Metric(
+        column="weighted_average",
+        direction="lower_better",
+        label="average travel time",
+        unit="minutes",
+    ),
+    Metric(
+        column="proportion_demand_improved",
+        direction="higher_better",
+        label="people with a meaningfully shorter journey",
+        as_percentage=True,
+    ),
+    Metric(
+        column="inter_tertile_ratio",
+        direction="lower_better",
+        label="equity (inter-tertile ratio)",
+        # 2dp, not Metric's default 1dp: the whole ratio sits in a narrow
+        # band (0.69-0.89 across the 6-site combinations), so at 1dp most
+        # options collapse onto "0.7" or "0.8" and a card can
+        # claim a site is 12th of 14 on a measure reading exactly what the
+        # winner reads. Matches the 2dp used in the Solution Breakdown table
+        # and the map titles.
+        decimals=2,
+    ),
+    Metric(
+        column="avg_lower_third_bins",
+        direction="lower_better",
+        label="travel time for the most deprived third",
+        unit="minutes",
+    ),
+]
+
+
+def metric_spreads(
+    solution_df: pd.DataFrame, metrics: list[Metric] = PARETO_METRICS
+) -> dict[str, dict]:
+    """
+    For each metric, how much the enumerated solutions actually differ.
+
+    Returns {column: {"min", "max", "spread", "n_tied_at_best"}}. Used to
+    flag objectives where the "best" option only just edges out a crowd of
+    others tied right behind it (or ties with several others outright) - a
+    badge on a measure like that is worth less than one on a measure that
+    genuinely separates the field.
+    """
+    spreads = {}
+    for m in metrics:
+        col = solution_df[m.column]
+        best = col.min() if m.direction != "higher_better" else col.max()
+        spreads[m.column] = {
+            "min": col.min(),
+            "max": col.max(),
+            "spread": col.max() - col.min(),
+            "n_tied_at_best": int(np.isclose(col, best).sum()),
+        }
+    return spreads
+
+
+def objective_champions(
+    solution_df: pd.DataFrame,
+    site_col: str = "site",
+    metrics: list[Metric] = PARETO_METRICS,
+) -> list[dict]:
+    """
+    Find, for each objective, every solution tied for the best value on it,
+    then group by site so a solution that wins on several objectives at
+    once appears once with all its badges attached.
+
+    Requires `solution_df["is_pareto_optimal"]` to already be set (i.e.
+    `solution.compute_pareto_front(metrics=...)` has run) - champions are
+    Pareto-optimal by construction (nothing beats the best value on its own
+    winning metric), but this asserts it rather than assuming it, since an
+    exact tie on every metric is the one edge case where it could fail.
+
+    Returns a list of dicts, one per champion site, each with:
+    - "site": the site name (or joined site names for multi-site solutions)
+    - "badges": list of metric labels this site is (jointly) best on
+    - "values": {column: raw value} for every metric, for display
+    - "weakest": (label, rank, n, column) for the metric this site ranks
+      worst on - the column is carried so the caller can pull that metric's
+      own value out of "values" and render it in the metric's units
+
+    Ordered by number of badges (most first), then by weighted_average, so
+    the strongest all-rounder leads and ties resolve deterministically.
+    """
+    champions: dict[str, dict] = {}
+
+    for m in metrics:
+        best = (
+            solution_df[m.column].min()
+            if m.direction != "higher_better"
+            else solution_df[m.column].max()
+        )
+        winners = solution_df[np.isclose(solution_df[m.column], best)]
+        for _, row in winners.iterrows():
+            site = row[site_col]
+            entry = champions.setdefault(
+                site,
+                {
+                    "site": site,
+                    "badges": [],
+                    "values": {mm.column: row[mm.column] for mm in metrics},
+                    "_row": row,
+                },
+            )
+            entry["badges"].append(m.label)
+
+    ranks = pd.DataFrame(
+        {
+            m.column: solution_df[m.column].rank(
+                method="min", ascending=(m.direction != "higher_better")
+            )
+            for m in metrics
+        },
+        index=solution_df.index,
+    )
+    n_total = len(solution_df)
+
+    for site, entry in champions.items():
+        row_idx = entry["_row"].name
+        row_ranks = ranks.loc[row_idx]
+        weakest_col = row_ranks.idxmax()
+        weakest_label = next(m.label for m in metrics if m.column == weakest_col)
+        entry["weakest"] = (
+            weakest_label,
+            int(row_ranks[weakest_col]),
+            n_total,
+            weakest_col,
+        )
+        assert bool(entry["_row"].get("is_pareto_optimal", True)), (
+            f"Champion '{site}' is not Pareto-optimal - unexpected unless "
+            "every metric is tied across the whole solution set."
+        )
+        del entry["_row"]
+
+    return sorted(
+        champions.values(),
+        key=lambda e: (-len(e["badges"]), e["values"]["weighted_average"]),
+    )
+
+
+def compromise_options(
+    solution_df: pd.DataFrame,
+    site_col: str = "site",
+    metrics: list[Metric] = PARETO_METRICS,
+) -> list[str]:
+    """
+    Pareto-optimal solutions that are not the (joint) best on any single
+    objective - never beaten across the board, but not the champion of
+    anything either. Empty whenever the champion set already covers the
+    whole Pareto front (verified true for the 5-site solution; the 6-site
+    solution has 6 such compromise options alongside its 5 champions).
+    """
+    champion_sites = {
+        c["site"] for c in objective_champions(solution_df, site_col, metrics)
+    }
+    front = solution_df[solution_df["is_pareto_optimal"]]
+    return [s for s in front[site_col] if s not in champion_sites]
+
+
+def ordinal(n: int) -> str:
+    """Convert an integer to its ordinal representation."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def get_solution_rank(
+    solution_df: pd.DataFrame,
+    selected_site: str,
+    metric: str,
+    ascending: bool = False,
+) -> int:
+    """
+    Return the 1-based rank of a site for a given metric.
+
+    kind="mergesort" (stable) because this rank is handed straight back to
+    lokigi as `plot_best_combination(solution_rank=...)`, which sorts with
+    mergesort internally. Ties are routine here - `max` takes only 2 distinct
+    values across the 14 five-site combinations - and pandas' default
+    quicksort is not stable, so the two orderings disagreed within a tie
+    group and the "your selected solution" panel plotted a different site
+    than the heading above it named.
+    """
+    sorted_df = solution_df.sort_values(
+        metric, ascending=ascending, kind="mergesort"
+    ).reset_index(drop=True)
+
+    matches = sorted_df.index[sorted_df["site"] == selected_site]
+
+    if len(matches) == 0:
+        raise ValueError(f"'{selected_site}' not found in dataframe.")
+
+    return matches[0] + 1
+
+
+def format_metric_value(metric: Metric, value: float) -> str:
+    """
+    Render one metric's value with its label for a champion-badge caption,
+    e.g. "23.4 minutes (average travel time)". Delegates the number
+    formatting itself to Metric.format_value(), which already knows how to
+    render a percentage vs. a unit vs. a bare ratio.
+    """
+    return f"{metric.format_value(value)} ({metric.label})"
+
+
+def best_combination_title(
+    solution_row: pd.Series,
+    sort_by: str,
+    n_sites: int,
+    solution_rank: int = 1,
+) -> str:
+    """
+    Build the title for one of the side-by-side maps on the Optimise pages,
+    replacing lokigi's default (which names whichever metric solve() ranked
+    on, not the one the page's "Rank On..." radio is currently set to).
+
+    `solution_row` must be the row lokigi actually plotted - fetch it with
+    SiteSolutionSet.return_best_combination_details(sort_by=..., top_n=rank)
+    so it goes through lokigi's own ordering rather than a second sort here.
+
+    Reads e.g.:
+
+        3rd best solution for 5 sites
+        Ranked on people with a meaningfully shorter journey: 10.0% (52,140 people)
+        Weighted Average: 22.1 minutes
+        Maximum: 61.2 minutes
+    """
+    if solution_rank == 1:
+        prefix = f"Best solution for {n_sites} sites"
+    else:
+        prefix = f"{ordinal(solution_rank)} best solution for {n_sites} sites"
+
+    # Name the sites this combination actually adds. "Best solution for 5
+    # sites" is true of every panel on the page - what distinguishes one
+    # combination from another is the one (or two) new sites on top of the
+    # existing network, and the map only says so via a pin label the reader
+    # has to hunt for among the required sites' labels.
+    #
+    # additional_site_names is lokigi's own list of the non-required sites in
+    # the combination, so this stays correct without the page having to pass
+    # in which sites are existing.
+    # One added site goes inline; two or more get a line each. Facility names
+    # here run to 40-odd characters ("Okehampton - Exeter Road Industrial
+    # Estate"), so "adds A and B" on one line makes the title wider than the
+    # map under it - and since st.pyplot scales the saved figure to its
+    # column width, a wider title means a visibly smaller map in each of the
+    # two side-by-side columns.
+    added = list(solution_row.get("additional_site_names", []) or [])
+    added_lines = []
+    if len(added) == 1:
+        prefix = f"{prefix}: adds {added[0]}"
+    elif added:
+        added_lines = [f"adds {added[0]}"] + [f"and {name}" for name in added[1:]]
+
+    ranked_on = (
+        f"Ranked on {RANK_METRIC_LABELS[sort_by]}: "
+        f"{RANK_METRIC_TITLE_VALUE[sort_by](solution_row)}"
+    )
+
+    lines = [prefix, *added_lines, ranked_on]
+
+    # The two context lines lokigi shows for a p-median objective, kept so
+    # both panels stay comparable on the standard measures - minus whichever
+    # one the ranked-on line has already just reported, so the same number
+    # never appears twice in consecutive lines.
+    if sort_by != "weighted_average":
+        lines.append(
+            f"Weighted Average: {solution_row['weighted_average']:.1f} minutes"
+        )
+    if sort_by != "max":
+        lines.append(f"Maximum: {solution_row['max']:.1f} minutes")
+
+    # Mirrors lokigi's own _unreachable_metrics_fragment: the travel-time
+    # metrics above are computed over reachable demand only, so a demand
+    # location with no feasible journey would otherwise vanish from the
+    # summary with nothing to say it had been excluded. 0 across every row of
+    # both current solution pickles - kept so a regenerated solve that does
+    # have unreachable regions can't silently lose the caveat.
+    n_unreachable = int(solution_row["regions_unreachable"])
+    if n_unreachable:
+        region_word = "region" if n_unreachable == 1 else "regions"
+        lines.append(f"{n_unreachable} {region_word} unreachable")
+
+    return "\n".join(lines)
+
+
+# Explanatory captions for the Solution Comparison panels whose plot isn't a
+# plain travel-time map. Each one says what the colours mean, since none of
+# these plots carries that in a legend.
+RANK_METRIC_PANEL_CAPTION = {
+    "proportion_within_coverage_threshold": (
+        f"**Red** areas are further than {COVERAGE_THRESHOLD_MINUTES} minutes from "
+        "their nearest site; **blue** areas are within it. This is the "
+        f"{COVERAGE_THRESHOLD_MINUTES}-minute question - see "
+        f"\"people still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes away\" for the "
+        "same map drawn at the point where distance stops being an inconvenience "
+        "and starts being a reason not to go."
+    ),
+    "proportion_demand_improved": (
+        "Only the areas whose journey actually gets meaningfully shorter are "
+        f"coloured - at least {MEANINGFUL_CHANGE_MINUTES:.0f} minutes off today's "
+        "travel time. Grey is everywhere the new site changes nothing. Darker blue "
+        "means a bigger saving. Watch the area-versus-people trap here: Devon's "
+        "rural areas are large and sparsely populated, so a big patch of blue can "
+        "be far fewer people than a small one over a town. The headcount in the "
+        "title is the number that counts."
+    ),
+    "mean_reduction_among_improved": (
+        "Journey times across Devon today against journey times with the new site, "
+        "weighted by population. Height is the **share** of people at that journey "
+        "time, not a headcount - the area under each curve is the whole population, "
+        "so the two curves are directly comparable even though only some people "
+        "move. The dashed lines mark each side's average. Most of Devon is "
+        "unaffected, so the curves overlap heavily: the gap between them is the "
+        "whole benefit. Note too that a large improved area on the map for "
+        "\"people with a meaningfully shorter journey\" may be very few people - "
+        "this view is by people, that one is by area."
+    ),
+    "inter_tertile_ratio": (
+        "Average travel time for each deprivation decile, most deprived first, "
+        "weighted by population. The dashed lines are the two numbers the ratio "
+        "divides: the **most deprived third** (deciles 1-3) over the **least "
+        "deprived third** (deciles 8-10), with the middle deliberately ignored. "
+        "Below 1 means the most deprived travel "
+        "less far on average. The shape across the bars matters as much as the "
+        "ratio - deprivation isn't geographically tidy, so no map can show you this."
+    ),
+    f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}": (
+        f"**Orange** areas are still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes "
+        "from their nearest site once the new site opens; **blue** areas are within "
+        "it. The same picture, and the same colours, as the Left Behind page - but "
+        f"after the money has been spent. Note this is a longer cutoff than the "
+        f"{COVERAGE_THRESHOLD_MINUTES}-minute coverage map, so more of Devon "
+        "qualifies as within it."
+    ),
+}
+
+
+# Two-colour scheme for the "still more than 45 minutes away" map,
+# deliberately different from the red/blue lokigi draws the 30-minute coverage
+# map in - the two panels answer different questions and shouldn't look
+# interchangeable. These are the same orange/blue the Travel by Car and Left
+# Behind pages already use for their own threshold maps, so a reader meets
+# this palette as "the left-behind map" they have seen before.
+LEFT_BEHIND_BEYOND_COLOUR = "#ef8a62"
+LEFT_BEHIND_WITHIN_COLOUR = "#67a9cf"
+
+# Colours for the equity panel's bars: the most-deprived third, the middle,
+# and the least-deprived third. The two ends are what the inter-tertile ratio
+# actually divides, so they carry colour and the middle stays neutral. Passed
+# to lokigi's plot_equity_tertiles(colours=...), which expects them in
+# most-disadvantaged / middle / least-disadvantaged order.
+EQUITY_TERTILE_COLOURS = ("#c2603f", "#c9c9c9", "#3f7fa8")
+
+
+@st.cache_resource
+def evaluate_combination_at_threshold(site_names: tuple[str, ...], threshold: float):
+    """
+    One specific combination of sites, re-evaluated against an arbitrary
+    coverage threshold, as a one-solution SiteSolutionSet.
+
+    lokigi's threshold map (`plot_best_combination(
+    plot_regions_not_meeting_threshold=True)`) colours regions by the
+    `within_threshold` flag computed at solve time - here 30 minutes, the
+    coverage threshold the whole solution set was solved against. There is no
+    kwarg to redraw it at a different cutoff, and overriding the stored
+    threshold would relabel the map without recolouring it. Re-evaluating the
+    combination at the threshold we actually want is what makes the colours
+    and the label agree.
+
+    `site_names` is a tuple rather than a list so it can be a cache key.
+    Verified against the pickled solution set: the 45-minute re-evaluation
+    reproduces its `demand_beyond_threshold_45` exactly.
+    """
+    return setup_lokigi_site_problem_car().evaluate_baseline(
+        site_names=list(site_names), threshold_for_coverage=threshold
+    )
+
+
+def _overlay_solution_sites(ax, site_problem, site_names):
+    """
+    Draw a solution's sites onto a plot that doesn't already show them,
+    using the same shapes as lokigi's own maps: triangles for the sites that
+    are already open, circles for the ones this solution adds.
+
+    plot_population_impact_map()'s own `show_sites="all"` marks every
+    *candidate* site on the problem, open or not, which on this page reads as
+    though all fourteen had been built.
+    """
+    sites = site_problem.candidate_sites
+    chosen = sites[sites["Facility_Name"].isin(site_names)]
+    existing = chosen[chosen["Existing"] == "Yes"]
+    added = chosen[chosen["Existing"] != "Yes"]
+
+    if not existing.empty:
+        existing.plot(ax=ax, color="black", marker="^", markersize=45, label="Required sites")
+    if not added.empty:
+        added.plot(
+            ax=ax,
+            color="black",
+            marker="o",
+            markersize=45,
+            label="Additional selected sites",
+        )
+    ax.legend(loc="upper right", fontsize=9)
+
+
+def solution_panel_figure(solution, sort_by, solution_rank):
+    """
+    The figure for one side of the Solution Comparison tab's two panels.
+
+    Most metrics get lokigi's travel-time map, but three of them are asking a
+    question that map can't answer, and get a purpose-built plot instead:
+
+    - "people with a meaningfully shorter journey" -> where the improvements
+      actually land (`plot_population_impact_map(direction="improved")`),
+      rather than a travel-time map that looks near-identical whether 8% or
+      18% of Devon benefits;
+    - "minutes saved for those who benefit" -> the before/after distribution
+      of journey times (`plot_population_impact_histogram`), the only view
+      that shows the journey times themselves moving;
+    - "people still more than 45 minutes away" -> a threshold map drawn at 45
+      minutes (see evaluate_combination_at_threshold), not at the 30-minute
+      coverage threshold everything else uses.
+
+    The first two compare against today's network via a SolutionComparator,
+    with `config_b` picking the same solution `solution_rank`/`sort_by` picks
+    for every other panel - cross-checked against solution_df: the comparator
+    reports the same demand_improved and mean_reduction_among_improved values
+    that the title prints.
+
+    Returns the Figure. The title is set here so every panel is labelled the
+    same way whatever it plots.
+    """
+    plotted_row = solution.return_best_combination_details(
+        sort_by=sort_by, top_n=solution_rank
+    ).iloc[solution_rank - 1]
+    site_names = list(plotted_row["site_names"])
+    config_b = {"sort_by": sort_by, "solution_rank": solution_rank}
+
+    n_added = len(list(plotted_row.get("additional_site_names", []) or []))
+    comparator = SolutionComparator(
+        evaluate_car_baseline(),
+        solution,
+        labels=(
+            "Today's network",
+            f"With the new site{'s' if n_added != 1 else ''}",
+        ),
+    )
+
+    if sort_by == "proportion_demand_improved":
+        _, ax = comparator.plot_population_impact_map(
+            direction="improved",
+            meaningful_change_threshold=MEANINGFUL_CHANGE_MINUTES,
+            config_b=config_b,
+            title=None,
+        )
+        _overlay_solution_sites(ax, solution.site_problem, site_names)
+    elif sort_by == "mean_reduction_among_improved":
+        _, ax = comparator.plot_population_impact_histogram(
+            config_b=config_b,
+            kind="kde",
+            title=None,
+            # lokigi writes its own caption into the figure explaining that a
+            # KDE's height is a share rather than a headcount. Suppressed here
+            # and folded into RANK_METRIC_PANEL_CAPTION below, so all the
+            # explanation for a panel sits in one place, styled like the rest
+            # of the page, instead of half inside the image.
+            caption="",
+        )
+        # "Travel cost" is the library's internal framing; on this page it is
+        # always minutes in a car.
+        ax.set_xlabel("Travel time to nearest site (minutes)")
+        # Shrink the existing legend in place rather than calling ax.legend()
+        # again - lokigi builds it from explicit proxy handles, which a bare
+        # ax.legend() can't rediscover, so re-calling it silently replaces a
+        # four-entry legend with an empty one.
+        legend = ax.get_legend()
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_fontsize(8)
+    elif sort_by == f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}":
+        ax = evaluate_combination_at_threshold(
+            tuple(site_names), LEFT_BEHIND_THRESHOLDS[0]
+        ).plot_best_combination(
+            plot_regions_not_meeting_threshold=True,
+            title=None,
+            # lokigi takes the first two colours of `cmap` for the two
+            # threshold categories, beyond-first - so this is (beyond,
+            # within), and it keeps this map visibly distinct from the
+            # 30-minute coverage map's red/blue.
+            cmap=ListedColormap(
+                [LEFT_BEHIND_BEYOND_COLOUR, LEFT_BEHIND_WITHIN_COLOUR]
+            ),
+        )
+    elif sort_by == "inter_tertile_ratio":
+        # lokigi 0.9.1's own version of the chart this app previously
+        # hand-rolled. weighted=True (its default, stated here because it's
+        # the whole point) plots the demand-weighted per-band means that
+        # inter_tertile_ratio is built from, so the two tertile lines are the
+        # numbers the ratio divides rather than an unweighted lookalike.
+        # caption="" because the app's explanation lives in
+        # RANK_METRIC_PANEL_CAPTION, below the panel, with the others.
+        _, ax = plt.subplots(figsize=(9, 6))
+        solution.plot_equity_tertiles(
+            solution_rank=solution_rank,
+            sort_by=sort_by,
+            weighted=True,
+            colours=EQUITY_TERTILE_COLOURS,
+            title=None,
+            caption="",
+            ax=ax,
+        )
+    else:
+        ax = solution.plot_best_combination(
+            solution_rank=solution_rank,
+            sort_by=sort_by,
+            plot_regions_not_meeting_threshold=(
+                sort_by == "proportion_within_coverage_threshold"
+            ),
+            title=None,
+        )
+
+    ax.set_title(
+        best_combination_title(
+            plotted_row,
+            sort_by,
+            n_sites=solution.n_sites,
+            solution_rank=solution_rank,
+        ),
+        fontsize=12,
+    )
+    return ax.figure
+
+
+def shared_map_bbox(*figures):
+    """
+    One savefig `bbox_inches` box that fits every figure passed in, for
+    rendering maps side by side in equal-width columns.
+
+    st.pyplot saves with bbox_inches="tight", which crops each figure to its
+    own content - so two maps whose titles differ in length (they always do:
+    one names the site the optimiser picked, the other the user's) come out
+    as images of different widths. Streamlit then scales each to its column
+    width, and the wider image renders shorter, leaving the two maps
+    different sizes and vertically out of step. Cropping both to the union
+    of their tight boxes makes the saved images pixel-identical in size, so
+    they scale to the same height and line up.
+
+    Pass the result to every one of those figures:
+    `st.pyplot(fig, bbox_inches=shared_map_bbox(fig_a, fig_b))`.
+    """
+    return Bbox.union(
+        [fig.get_tightbbox(fig.canvas.get_renderer()) for fig in figures]
+    )
+
+
+def render_objective_champions(
+    champions: list[dict],
+    spreads: dict[str, dict],
+    compromises: list[str],
+    n_total: int,
+    metrics: list[Metric] = PARETO_METRICS,
+) -> None:
+    """
+    Render the objective-champion shortlist as one bordered card per site,
+    followed by the compromise-count and flat-spread captions. Shared by
+    both Optimise pages so the shortlist looks and reads identically -
+    `champions`/`spreads`/`compromises` come from `objective_champions()` /
+    `metric_spreads()` / `compromise_options()` above.
+    """
+    metric_by_col = {m.column: m for m in metrics}
+
+    badge_counts: dict[str, int] = {}
+    for champ in champions:
+        for badge in champ["badges"]:
+            badge_counts[badge] = badge_counts.get(badge, 0) + 1
+
+    for champ in champions:
+        with st.container(border=True):
+            solo_badges = [b for b in champ["badges"] if badge_counts[b] == 1]
+            joint_badges = [b for b in champ["badges"] if badge_counts[b] > 1]
+            badge_parts = []
+            if solo_badges:
+                badge_parts.append("best for " + ", ".join(solo_badges))
+            if joint_badges:
+                badge_parts.append("joint best for " + ", ".join(joint_badges))
+
+            st.markdown(
+                f":material/location_on: **{champ['site']}** — "
+                + "; ".join(badge_parts)
+            )
+
+            badge_cols = [m.column for m in metrics if m.label in champ["badges"]]
+            st.caption(
+                " · ".join(
+                    format_metric_value(metric_by_col[col], champ["values"][col])
+                    for col in badge_cols
+                )
+            )
+
+            # The value, not just the rank: "3rd of 14" says where this site
+            # sits in the field but nothing about how much is actually being
+            # given up - 3rd of 14 could be a hair behind the leader or half
+            # the benefit. Formatted by the metric itself, so it matches the
+            # badge values directly above it (percentage, minutes or ratio).
+            weakest_label, weakest_rank, weakest_n, weakest_col = champ["weakest"]
+            weakest_metric = metric_by_col[weakest_col]
+            weakest_value = weakest_metric.format_value(champ["values"][weakest_col])
+            st.caption(
+                f"Gives ground on: {weakest_label} "
+                f"({ordinal(weakest_rank)} of {weakest_n}, {weakest_value})"
+            )
+
+    if compromises:
+        plural = len(compromises) != 1
+        st.caption(
+            f"{len(compromises)} further combination{'s' if plural else ''} "
+            f"{'are' if plural else 'is'} never beaten across the board, but not "
+            "the best at any single measure either."
+        )
+
+    # Flagged by an outright tie for the best value, not by the raw spread -
+    # spread is in different units per metric (minutes vs a 0-1 proportion vs
+    # a ratio), so a single absolute threshold would flag every proportion-
+    # or ratio-based metric as "flat" regardless of whether it actually
+    # separates the field. A genuine tie for best is scale-independent: it
+    # means the badge doesn't even uniquely distinguish one option.
+    flat_spreads = [
+        (metric_by_col[col].label, s)
+        for col, s in spreads.items()
+        if s["n_tied_at_best"] > 1
+    ]
+    if flat_spreads:
+        flat_bits = "; ".join(
+            f"{label} varies by only {s['spread']:.2f} across all {n_total} options, "
+            f"with {s['n_tied_at_best']} tied for best"
+            for label, s in flat_spreads
+        )
+        st.caption(
+            f"Worth noting: {flat_bits}. A badge on a measure this flat is worth "
+            "less than one on a measure that genuinely separates the field."
+        )
+
+
+def render_ordinal_rank_summary(rank_of) -> None:
+    """
+    Render the "Your solution is the Nth best..." bullet list shared by both
+    Optimise pages, over ORDINAL_RANK_SUMMARY_METRICS.
+
+    `rank_of(metric)` must return the 1-based rank for that metric - callers
+    supply this as a closure since the two pages rank differently (a single
+    site's own rank vs. the best two-site pairing that still includes it).
+    """
+    bullets = "\n".join(
+        f"- **{ordinal(rank_of(m))}** best in terms of {RANK_METRIC_LABELS[m]}."
+        for m in ORDINAL_RANK_SUMMARY_METRICS
+    )
+    st.markdown(f"Your solution is the:\n\n{bullets}\n")
+
 
 SITE_SELECTION_SUBMITTABLE = [
     "demand",
@@ -61,6 +862,7 @@ SITE_SELECTION_SUBMITTABLE = [
     "demand_deprivation_hotspots",
     "demand_travel_hotspots",
     "deprivation_travel_hotspots",
+    "left_behind",
     "final",
 ]
 
@@ -80,7 +882,28 @@ SITE_SELECTION_LABELS = {
     "demand_deprivation_hotspots": "demand & deprivation hotspots",
     "demand_travel_hotspots": "demand & travel hotspots",
     "deprivation_travel_hotspots": "deprivation & travel hotspots",
+    "left_behind": "who's left behind today",
     "final": "your final decision",
+}
+
+# Investigation ids (used by ``pages_visited`` and the investigation graph in
+# utils_investigations.py) don't always match the SITE_SELECTION_SUBMITTABLE /
+# confirmed_site_* keys used for site choices - a few pages' site keys drifted
+# from their investigation id. This maps id -> site key so the two can be
+# joined (see ``most_recent_prior_choice``).
+INVESTIGATION_ID_TO_SITE_KEY = {
+    "demand": "demand",
+    "deprivation": "deprivation",
+    "travel_car": "car_travel",
+    "travel_pt": "public_transport",
+    "hotspots_combined": "demand_deprivation_hotspots",
+    "hotspots_demand_travel": "demand_travel_hotspots",
+    "hotspots_deprivation_travel": "deprivation_travel_hotspots",
+    "2sfca_car": "2sfca_car",
+    "2sfca_pt": "2sfca_pt",
+    "utilisation": "utilisation",
+    "projected_demand": "projected_demand",
+    "left_behind": "left_behind",
 }
 
 
@@ -149,6 +972,24 @@ def load_deprivation():
 @st.cache_data
 def load_demand():
     return pd.read_csv("data/demand_MF_50_84.csv")
+
+
+@st.cache_data
+def demand_by_equity_band() -> dict[int, float]:
+    """Total 50-84 population in each IMD decile (1 = most deprived).
+
+    Used to normalise the raw headcounts in a solution_df's
+    *_by_equity_group columns into shares of each band's own population -
+    a raw headcount makes the biggest band look worst regardless of how
+    deprived it actually is.
+    """
+    merged = load_demand().merge(
+        load_deprivation(), left_on="LSOA 2021 Name", right_on="LSOA name (2021)"
+    )
+    totals = merged.groupby(
+        "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
+    )["MF50-84"].sum()
+    return totals.to_dict()
 
 
 @st.cache_data
@@ -288,7 +1129,8 @@ def write_terminal_html(
 </body>
 </html>"""
 
-    with open(output_path, "w") as f:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     return len(text), reveal_speed_ms
@@ -399,6 +1241,47 @@ def record_page_visited(investigation: Investigation) -> None:
                 "analyst_days": investigation.analyst_days,
             }
         )
+
+
+def most_recent_prior_choice(current_investigation_id: str) -> dict | None:
+    """The most recently confirmed site from an earlier investigation, if any.
+
+    Walks ``pages_visited`` newest-first (skipping the current page) and
+    returns the first ``{"What": ..., "Site": ...}`` dict that actually has a
+    confirmed site recorded - so a page that was visited but left without
+    submitting (possible via direct URL navigation, which bypasses the
+    button-only gating) is skipped rather than returned as a false memory.
+    """
+    for visit in reversed(st.session_state.pages_visited):
+        if visit["id"] == current_investigation_id:
+            continue
+        site_key = INVESTIGATION_ID_TO_SITE_KEY.get(visit["id"])
+        if site_key is None:
+            continue
+        choice = st.session_state.get(f"confirmed_site_{site_key}")
+        if choice is not None:
+            return choice
+    return None
+
+
+def render_prior_choice_recap(investigation: Investigation) -> None:
+    """Remind the user what they last committed to, before they see new evidence.
+
+    Without this, every evidence page renders identically regardless of what
+    came before it: the investigation graph gates *which* pages you can
+    reach, but nothing downstream reads what happened upstream. This is the
+    cheapest way to make earlier choices visibly carry forward - and it sets
+    up the "did this change your mind?" question every subsequent page is
+    implicitly asking.
+    """
+    prior = most_recent_prior_choice(investigation.id)
+    if prior is None:
+        return
+    st.info(
+        f"Last time you committed to a site, you picked **{prior['Site']}** "
+        f"— based on {prior['What']}. Let's see what this page adds.",
+        icon=":material/history:",
+    )
 
 
 def _prerequisites_met(investigation: Investigation) -> bool:
@@ -835,7 +1718,7 @@ def select_site_from_current_evidence():
 
 @st.cache_data
 def load_car_travel_matrix():
-    return pd.read_csv("data/travel_matrix_car.csv").fillna(9999.0)
+    return pd.read_csv("data/travel_matrix_car.csv")
 
 
 @st.cache_data
@@ -855,12 +1738,13 @@ def setup_lokigi_site_problem_BASE():
         load_devon_geography(), common_col="LSOA21NM"
     )
 
-    # lokigi_site_problem.add_equity_data(
-    #     load_deprivation(),
-    #     equity_col="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
-    #     common_col="LSOA name (2021)",
-    #     label="IMD",
-    # )
+    lokigi_site_problem.add_equity_data(
+        load_deprivation(),
+        equity_col="Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA",
+        common_col="LSOA name (2021)",
+        label="IMD",
+        disadvantaged_end="low",  # decile 1 = most deprived
+    )
 
     return lokigi_site_problem
 
@@ -934,6 +1818,18 @@ def setup_lokigi_site_problem_car():
 
 
 @st.cache_resource
+def evaluate_car_baseline():
+    """Today's network (the 4 existing CDCs) evaluated on its own - no
+    candidate site involved - for the Left Behind page. evaluate_baseline()
+    defaults to the sites flagged via required_sites_col in
+    setup_lokigi_site_problem_car(), i.e. exactly the existing network."""
+    return setup_lokigi_site_problem_car().evaluate_baseline(
+        threshold_for_coverage=COVERAGE_THRESHOLD_MINUTES,
+        beyond_thresholds=LEFT_BEHIND_THRESHOLDS,
+    )
+
+
+@st.cache_resource
 def setup_lokigi_site_problem_pt():
     lokigi_site_problem = setup_lokigi_site_problem_BASE().copy()
 
@@ -944,7 +1840,11 @@ def setup_lokigi_site_problem_pt():
     )
 
     lokigi_site_problem.add_travel_matrix(
-        load_pt_travel_matrix(), unit="minutes", source_col="from_id"
+        load_pt_travel_matrix(),
+        unit="minutes",
+        source_col="from_id",
+        allow_missing=True,
+        treat_as_missing=9999,
     )
 
     return lokigi_site_problem
@@ -955,7 +1855,11 @@ def solve_pt_travel():
     # D4 fix, PT counterpart of solve_car_existing_travel() above - see that
     # function's comment for why caching the solve() call (not just the
     # problem setup) is what actually removes the per-rerun cost.
-    return setup_lokigi_site_problem_pt().solve(p=4)
+    # unreachable_cost is set well above any plausible journey time (the
+    # longest real PT trip in the matrix is nowhere close) so the 109 cells
+    # that treat_as_missing above converts to NaN are penalised rather than
+    # silently dropped from ranking.
+    return setup_lokigi_site_problem_pt().solve(p=4, unreachable_cost=360.0)
 
 
 def _setup_lokigi_site_problem_2sfca(travel_matrix):
@@ -978,7 +1882,11 @@ def _setup_lokigi_site_problem_2sfca(travel_matrix):
     )
 
     lokigi_site_problem.add_travel_matrix(
-        travel_matrix, unit="minutes", source_col="from_id"
+        travel_matrix,
+        unit="minutes",
+        source_col="from_id",
+        allow_missing=True,
+        treat_as_missing=9999,
     )
 
     return lokigi_site_problem

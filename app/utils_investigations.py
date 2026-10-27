@@ -18,6 +18,14 @@ class Investigation:
     is_entry_point: bool
 
     analyst_days: float
+
+    # What this analysis actually measured, in one line - not the map it
+    # drew, but the single number underneath it that "best" was implicitly
+    # judged against. Used by the Debrief page to make explicit, all in one
+    # place, that every "best site" answer secretly depended on which of
+    # these was in play.
+    implicit_measure: str
+
     icon: str = "arrow_forward"
 
 
@@ -35,6 +43,7 @@ DEMAND = Investigation(
     analyst_prompt=("Show me the population aged 50-85 who may require CDC services."),
     is_entry_point=True,
     analyst_days=0.5,
+    implicit_measure="raw headcount of the 50-84 population, with no notion of distance or need",
     icon="groups_2",
 )
 
@@ -48,10 +57,12 @@ DEPRIVATION = Investigation(
     recommended_next=[
         "demand",
         "travel_car",
+        "left_behind",
     ],
     analyst_prompt=("Show me areas experiencing the highest deprivation."),
     is_entry_point=True,
     analyst_days=0.5,
+    implicit_measure="deprivation alone (IMD decile), with no notion of distance or headcount",
     icon="payment_arrow_down",
 )
 
@@ -62,10 +73,14 @@ TRAVEL_CAR = Investigation(
     category=["accessibility"],
     prerequisites=[],
     parent=None,
-    recommended_next=["travel_pt", "demand"],
+    recommended_next=["travel_pt", "demand", "left_behind"],
     analyst_prompt=("Show me travel times to existing CDCs by car."),
     is_entry_point=True,
     analyst_days=3,
+    implicit_measure=(
+        "average car travel time (weighted_average) - the same p-median measure "
+        "the optimiser itself ranks on by default"
+    ),
     icon="directions_car",
 )
 
@@ -80,6 +95,7 @@ TRAVEL_PT = Investigation(
     analyst_prompt=("Look at travel times if patients are using public transport."),
     is_entry_point=False,
     analyst_days=5,
+    implicit_measure="average public transport travel time (weighted_average)",
     icon="train",
 )
 
@@ -102,6 +118,10 @@ HOTSPOTS_DEMAND_DEPRIVATION = Investigation(
     analyst_prompt=("Combine demand and deprivation to identify priority areas."),
     is_entry_point=False,
     analyst_days=1,
+    implicit_measure=(
+        "where high headcount and high deprivation overlap - a visual overlay, "
+        "not a combined score"
+    ),
     icon="emergency_heat",
 )
 
@@ -123,6 +143,7 @@ HOTSPOTS_DEMAND_TRAVEL = Investigation(
     ),
     is_entry_point=False,
     analyst_days=1,
+    implicit_measure="where high headcount and long travel times overlap",
     icon="car_crash",
 )
 
@@ -141,6 +162,7 @@ HOTSPOTS_DEPRIVATION_TRAVEL = Investigation(
     ),
     is_entry_point=False,
     analyst_days=1,
+    implicit_measure="where high deprivation and long travel times overlap",
     icon="disc_full",
 )
 
@@ -166,6 +188,10 @@ TWO_SFCA_CAR = Investigation(
     ),
     is_entry_point=False,
     analyst_days=2,
+    implicit_measure=(
+        "a capacity-adjusted access score (2SFCA) by car - the only measure "
+        "here that accounts for how full a centre already is"
+    ),
     icon="ambulance",
 )
 
@@ -182,6 +208,7 @@ TWO_SFCA_PT = Investigation(
     ),
     is_entry_point=False,
     analyst_days=2.5,
+    implicit_measure="a capacity-adjusted access score (2SFCA) by public transport",
     icon="departure_board",
 )
 
@@ -196,6 +223,10 @@ UTILISATION = Investigation(
     recommended_next=["2sfca_car", "demand", "projected_demand", "travel_car"],
     analyst_prompt="Show me how well-used the existing four CDCs are.",
     analyst_days=2,
+    implicit_measure=(
+        "how much of each existing centre's capacity is already used - a "
+        "supply-side measure, not a location one"
+    ),
     icon="reduce_capacity",
 )
 
@@ -217,7 +248,38 @@ PROJECTED_DEMAND = Investigation(
     ],
     analyst_prompt="Show me how the 50-85 population is projected to change across Devon in the next 10 years.",
     analyst_days=2,
+    implicit_measure="projected headcount 10 years out, not today's",
     icon="show_chart",
+)
+
+# Every other analysis colours a map; none of them puts a number of people on
+# the problem, or shows the access gradient across deprivation bands. This is
+# the missing "how bad is today, exactly?" status-quo page - deliberately
+# gated on travel_car only (not travel_pt too), so it isn't locked behind the
+# 5-day PT briefing.
+LEFT_BEHIND = Investigation(
+    id="left_behind",
+    title="Who is left behind today?",
+    page="app/Left_Behind.py",
+    category=["accessibility", "equity"],
+    prerequisites=["travel_car"],
+    parent="travel_car",
+    recommended_next=[
+        "hotspots_deprivation_travel",
+        "2sfca_car",
+        "utilisation",
+    ],
+    analyst_prompt=(
+        "Tell me exactly how many people can't reach a CDC within a "
+        "reasonable time today, and whether that falls unevenly by deprivation."
+    ),
+    is_entry_point=False,
+    analyst_days=1,
+    implicit_measure=(
+        "the number of people still beyond a 45-minute journey today "
+        "(demand_beyond_threshold_45)"
+    ),
+    icon="person_off",
 )
 
 # At the bottom of investigations.py
@@ -236,5 +298,6 @@ ALL_INVESTIGATIONS: dict[str, Investigation] = {
         TWO_SFCA_PT,
         UTILISATION,
         PROJECTED_DEMAND,
+        LEFT_BEHIND,
     ]
 }
