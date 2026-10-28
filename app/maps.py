@@ -158,11 +158,16 @@ def add_site_legend(m):
 ###########################
 # MARK: Deprivation
 ###########################
+IMD_DECILE_COL = (
+    "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
+)
+
+
 def render_deprivation_map():
     deprivation_gdf = create_deprivation_gdf()
     sites_gdf = load_devon_sites()
 
-    imd_col = "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOA"
+    imd_col = IMD_DECILE_COL
     # Create choropleth
     m = _slim_for_map(deprivation_gdf, ["LSOA21NM", imd_col]).explore(
         column=imd_col,
@@ -884,18 +889,176 @@ def render_travel_maps(best_solution_gdf, mode_label, max_threshold=60):
 
 
 def render_left_behind_map(best_solution_gdf):
-    """The Left Behind page's map: a 45/60 radio rather than the free 15-60
+    """The Left Behind page's map: a 30/45/60 radio rather than the free 15-60
     slider in render_travel_maps() above, so this page reads as its own
-    analysis rather than a replay of the Travel by Car page."""
+    analysis rather than a replay of the Travel by Car page.
+
+    Unlike that page's orange/blue threshold map, the fill colour here is
+    deprivation (the same cividis_r deciles as the Deprivation page) and the
+    areas beyond the threshold are hatched on top, so both halves of the
+    page's question - who is far away, and are they the deprived ones - sit
+    on a single map."""
+    from folium.plugins import StripePattern
+
     threshold = st.radio(
         "Show areas more than...",
-        [45, 60],
+        [30, 45, 60],
+        # 45 by default, matching the equity chart above the map.
+        index=1,
         format_func=lambda t: f"{t} minutes from any CDC",
         horizontal=True,
     )
-    return render_travel_existing_map(
-        best_solution_gdf, what="threshold", threshold=threshold
+    all_deciles = list(range(1, 11))
+    deciles = st.pills(
+        "Deprivation deciles on the map (1 = most deprived)",
+        all_deciles,
+        selection_mode="multi",
+        default=all_deciles,
+        help="Highlighted deciles are shown on the map; unhighlighted ones are hidden.",
     )
+    st.caption(
+        "**All ten deciles are shown to start with.** Click a decile to hide it "
+        "from the map, and click it again to bring it back."
+    )
+    # st_folium has to render on every run - make_selection_map() reads the
+    # clicked site pin from its return value - so an empty selection falls
+    # back to every decile rather than skipping the map.
+    if not deciles:
+        st.warning("No deciles selected, so the map is showing all of them.")
+        deciles = all_deciles
+    st.caption(
+        "Colour shows each area's deprivation decile; **hatched** areas are more "
+        f"than {threshold} minutes from any CDC by car today. Untick the hatching "
+        "in the layer box to see the colours underneath more clearly."
+    )
+
+    sites_gdf = load_devon_sites()
+
+    # .copy() because best_solution_gdf is reused across fragment reruns.
+    gdf = best_solution_gdf.copy()
+    gdf["exceeds_threshold"] = (gdf["min_cost"] > threshold).map(
+        {True: "Yes", False: "No"}
+    )
+    tooltip = [
+        "LSOA21NM",
+        IMD_DECILE_COL,
+        "min_cost",
+        "selected_site",
+        "exceeds_threshold",
+    ]
+    slim = _slim_for_map(gdf.round(1), tooltip)
+    # Taken before filtering, so hiding deciles doesn't move the view.
+    min_x, min_y, max_x, max_y = slim.total_bounds
+    slim = slim[slim[IMD_DECILE_COL].isin(deciles)]
+
+    m = slim.explore(
+        column=IMD_DECILE_COL,
+        categorical=True,
+        # Fixed categories keep each decile's colour (and the legend) the same
+        # whichever deciles are hidden.
+        categories=all_deciles,
+        cmap="cividis_r",
+        tiles=BASEMAP_TILES,
+        tooltip=tooltip,
+        tooltip_kwds={
+            "aliases": [
+                "Area:",
+                "IMD Decile (1 = most deprived):",
+                "Travel time to nearest site (minutes):",
+                "Nearest site:",
+                f"More than {threshold} minutes away:",
+            ],
+            "labels": True,
+            "sticky": False,
+        },
+        legend_kwds={"caption": "IMD Decile (1 = most deprived)"},
+        name="IMD Deciles",
+        zoom_start=9,
+    )
+
+    # Leaflet.pattern needs the pattern registered on the map before any layer
+    # references it. interactive=False lets hovers fall through to the
+    # deprivation layer underneath, so its tooltip still works on hatched areas.
+    # Skipped when nothing is hatched (e.g. 60 minutes with only a few deciles
+    # shown): folium's style_function mapping fails on an empty layer.
+    hatched = slim[slim["exceeds_threshold"] == "Yes"][["geometry"]]
+    if not hatched.empty:
+        hatch = StripePattern(angle=45, weight=2, space_weight=4, opacity=0.8)
+        hatch.add_to(m)
+        folium.GeoJson(
+            hatched,
+            name=f"Hatching: more than {threshold} minutes from any CDC",
+            style_function=lambda _: {
+                "fillPattern": hatch,
+                "fillOpacity": 1,
+                "color": "#000000",
+                "weight": 0.5,
+            },
+            interactive=False,
+        ).add_to(m)
+    m.fit_bounds([[min_y, min_x], [max_y, max_x]])
+
+    # Workaround for legend colours (same as the deprivation map)
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .legend-labels {
+            color: black !important;
+        }
+
+        .legend-title {
+            color: black !important;
+        }
+        </style>
+        """)
+    )
+
+    m = add_sites_to_map(m, sites_gdf=sites_gdf)
+    m = _add_left_behind_legend(m, threshold)
+
+    return st_folium(m, width="stretch")
+
+
+def _add_left_behind_legend(m, threshold):
+    # The site legend plus a hatched swatch, in one box - the IMD colours get
+    # explore()'s own categorical legend. The CSS stripes are drawn at the same
+    # angle as the StripePattern above.
+    legend_html = f"""
+    <div class="left-behind-maplegend" style="
+        position: fixed;
+        bottom: 50px;
+        left: 50px;
+        width: 210px;
+        background-color: white;
+        border: 2px solid grey;
+        z-index: 9999;
+        font-size: 14px;
+        padding: 10px;
+    ">
+    <div style="display:flex;align-items:center;gap:6px;">
+        <span style="display:inline-block;width:21px;height:21px;flex-shrink:0;
+            border:1px solid #333;
+            background:repeating-linear-gradient(45deg,#000 0 2px,#fff 2px 6px);">
+        </span>
+        <span>More than {threshold} minutes from any CDC</span>
+    </div>
+    <hr style="margin:8px 0;border:none;border-top:1px solid #ddd;">
+    <b>CDC sites</b>
+    {_legend_pin("red", "Existing CDC")}
+    {_legend_pin("blue", "Proposed CDC")}
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().header.add_child(
+        folium.Element("""
+        <style>
+        .left-behind-maplegend { color: black !important; }
+        </style>
+        """)
+    )
+
+    return m
 
 
 ###########################

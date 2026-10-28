@@ -519,7 +519,7 @@ RANK_METRIC_PANEL_CAPTION = {
     f"demand_beyond_threshold_{LEFT_BEHIND_THRESHOLDS[0]}": (
         f"**Orange** areas are still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes "
         "from their nearest site once the new site opens; **blue** areas are within "
-        "it. The same picture, and the same colours, as the Left Behind page - but "
+        "it. The same question the Left Behind page asked of today's network - but "
         f"after the money has been spent. Note this is a longer cutoff than the "
         f"{COVERAGE_THRESHOLD_MINUTES}-minute coverage map, so more of Devon "
         "qualifies as within it."
@@ -530,9 +530,9 @@ RANK_METRIC_PANEL_CAPTION = {
 # Two-colour scheme for the "still more than 45 minutes away" map,
 # deliberately different from the red/blue lokigi draws the 30-minute coverage
 # map in - the two panels answer different questions and shouldn't look
-# interchangeable. These are the same orange/blue the Travel by Car and Left
-# Behind pages already use for their own threshold maps, so a reader meets
-# this palette as "the left-behind map" they have seen before.
+# interchangeable. These are the same orange/blue the Travel by Car page
+# already uses for its own threshold map, so a reader meets this palette as
+# "the left-behind map" they have seen before.
 LEFT_BEHIND_BEYOND_COLOUR = "#ef8a62"
 LEFT_BEHIND_WITHIN_COLOUR = "#67a9cf"
 
@@ -1906,10 +1906,14 @@ def evaluate_car_baseline():
     """Today's network (the 4 existing CDCs) evaluated on its own - no
     candidate site involved - for the Left Behind page. evaluate_baseline()
     defaults to the sites flagged via required_sites_col in
-    setup_lokigi_site_problem_car(), i.e. exactly the existing network."""
+    setup_lokigi_site_problem_car(), i.e. exactly the existing network.
+
+    The Left Behind page also counts people beyond the 30-minute coverage
+    cutoff, so that's added here rather than to LEFT_BEHIND_THRESHOLDS, whose
+    first entry other pages rely on being 45."""
     return setup_lokigi_site_problem_car().evaluate_baseline(
         threshold_for_coverage=COVERAGE_THRESHOLD_MINUTES,
-        beyond_thresholds=LEFT_BEHIND_THRESHOLDS,
+        beyond_thresholds=[COVERAGE_THRESHOLD_MINUTES, *LEFT_BEHIND_THRESHOLDS],
     )
 
 

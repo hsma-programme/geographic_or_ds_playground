@@ -32,7 +32,7 @@ best_solution_gdf = region_geometry.merge(
 intro_text = """
 > "Every map so far has coloured the problem in," your analyst says, "but none of them has actually counted it."
 <br><br>
-> "So here's today's network on its own - the four CDCs open right now, nothing proposed, nothing hypothetical. Just: how many people are currently more than 45 or 60 minutes from any of them by car, and are they spread evenly or not."
+> "So here's today's network on its own - the four CDCs open right now, nothing proposed, nothing hypothetical. Just: how many people are currently more than 30, 45 or 60 minutes from any of them by car, and are they spread evenly or not."
 <br><br>
 > "Spoiler," they add, not looking up from their screen. "It's not even."
 """
@@ -49,10 +49,16 @@ if not st.session_state.site_submitted_left_behind:
     st.iframe(Path("app/assets/terminal_working/left_behind.html"), height=275)
     render_prior_choice_recap(LEFT_BEHIND)
 
+    demand_30 = baseline_row["demand_beyond_threshold_30"]
     demand_45 = baseline_row["demand_beyond_threshold_45"]
     demand_60 = baseline_row["demand_beyond_threshold_60"]
 
-    col1, col2 = st.columns(2)
+    col0, col1, col2 = st.columns(3)
+    with col0:
+        st.metric("More than 30 minutes from any CDC today", f"{demand_30:,.0f}")
+        st.caption(
+            f"{demand_30 / total_demand:.1%} of the 50-84 population across Devon."
+        )
     with col1:
         st.metric("More than 45 minutes from any CDC today", f"{demand_45:,.0f}")
         st.caption(
