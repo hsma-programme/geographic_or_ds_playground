@@ -483,7 +483,7 @@ RANK_METRIC_PANEL_CAPTION = {
         f"**Red** areas are further than {COVERAGE_THRESHOLD_MINUTES} minutes from "
         "their nearest site; **blue** areas are within it. This is the "
         f"{COVERAGE_THRESHOLD_MINUTES}-minute question - see "
-        f"\"people still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes away\" for the "
+        f'"people still more than {LEFT_BEHIND_THRESHOLDS[0]} minutes away" for the '
         "same map drawn at the point where distance stops being an inconvenience "
         "and starts being a reason not to go."
     ),
@@ -504,7 +504,7 @@ RANK_METRIC_PANEL_CAPTION = {
         "move. The dashed lines mark each side's average. Most of Devon is "
         "unaffected, so the curves overlap heavily: the gap between them is the "
         "whole benefit. Note too that a large improved area on the map for "
-        "\"people with a meaningfully shorter journey\" may be very few people - "
+        '"people with a meaningfully shorter journey" may be very few people - '
         "this view is by people, that one is by area."
     ),
     "inter_tertile_ratio": (
@@ -584,7 +584,9 @@ def _overlay_solution_sites(ax, site_problem, site_names):
     added = chosen[chosen["Existing"] != "Yes"]
 
     if not existing.empty:
-        existing.plot(ax=ax, color="black", marker="^", markersize=45, label="Required sites")
+        existing.plot(
+            ax=ax, color="black", marker="^", markersize=45, label="Required sites"
+        )
     if not added.empty:
         added.plot(
             ax=ax,
@@ -680,9 +682,7 @@ def solution_panel_figure(solution, sort_by, solution_rank):
             # threshold categories, beyond-first - so this is (beyond,
             # within), and it keeps this map visibly distinct from the
             # 30-minute coverage map's red/blue.
-            cmap=ListedColormap(
-                [LEFT_BEHIND_BEYOND_COLOUR, LEFT_BEHIND_WITHIN_COLOUR]
-            ),
+            cmap=ListedColormap([LEFT_BEHIND_BEYOND_COLOUR, LEFT_BEHIND_WITHIN_COLOUR]),
         )
     elif sort_by == "inter_tertile_ratio":
         # lokigi 0.9.1's own version of the chart this app previously
@@ -741,9 +741,7 @@ def shared_map_bbox(*figures):
     Pass the result to every one of those figures:
     `st.pyplot(fig, bbox_inches=shared_map_bbox(fig_a, fig_b))`.
     """
-    return Bbox.union(
-        [fig.get_tightbbox(fig.canvas.get_renderer()) for fig in figures]
-    )
+    return Bbox.union([fig.get_tightbbox(fig.canvas.get_renderer()) for fig in figures])
 
 
 def render_objective_champions(
@@ -1581,12 +1579,14 @@ ANALYST_CAPACITY_MESSAGES = [
         "message": "Your analyst is mysteriously missing every time you try to talk to them. "
         "You swear you saw them exit via a ground-floor window when you approached "
         "the building recently, but you cannot prove this.",
+        "image": "app/assets/analyst_jump.jpeg",
     },
     {
         "analyses_remaining": 1,
         "message": "Your analyst informs you that they are considering a career in "
         "sheep farming. They have begun browsing rural property listings "
         "in Scotland during meetings. It may be prudent to reach a decision soon.",
+        "image": "app/assets/analyst_career_change.jpeg",
     },
 ]
 
@@ -1621,11 +1621,12 @@ def capacity_exhausted() -> bool:
     return analyses_remaining() <= 0
 
 
-def _capacity_message(remaining: int) -> str | None:
-    """The analyst flavour text for a given number of remaining briefings."""
+def _capacity_entry(remaining: int) -> dict | None:
+    """The analyst flavour text (and optional image) for a given number of
+    remaining briefings."""
     for entry in ANALYST_CAPACITY_MESSAGES:
         if entry["analyses_remaining"] == remaining:
-            return entry["message"]
+            return entry
     return None
 
 
@@ -1633,7 +1634,10 @@ def render_capacity_status() -> None:
     """Tell the user how many briefings they can still request.
 
     Uses the flavour text in ``ANALYST_CAPACITY_MESSAGES`` and escalates the
-    styling (info -> warning -> error) as the budget runs down.
+    styling (info -> warning -> error) as the budget runs down. If the entry
+    has an ``image``, the message takes the left half and the image is shown
+    through the CRT filter on the right; otherwise the message spans the
+    full width.
     """
     remaining = analyses_remaining()
 
@@ -1647,13 +1651,30 @@ def render_capacity_status() -> None:
     else:
         plural = "briefing" if remaining == 1 else "briefings"
         header = f"You can request **{remaining}** more {plural}."
-        message = _capacity_message(remaining)
+        entry = _capacity_entry(remaining) or {}
+        message = entry.get("message")
         body = f"{header}\n\n{message}" if message else header
+        image_path = entry.get("image")
 
-        if remaining <= 2:
-            st.warning(body, icon=":material/hourglass_bottom:")
+        if image_path:
+            message_col, image_col = st.columns(2, vertical_alignment="center")
         else:
-            st.info(body, icon=":material/hourglass_top:")
+            message_col = st.container()
+
+        with message_col:
+            if remaining <= 2:
+                st.warning(body, icon=":material/hourglass_bottom:")
+            else:
+                st.info(body, icon=":material/hourglass_top:")
+
+        if image_path:
+            generated_crt = write_crt_html(
+                image_path=image_path,
+                output_path=f"app/assets/crt_working/capacity_{Path(image_path).stem}.html",
+                curvature=0.3,
+                scanlines=0.6,
+            )
+            image_col.iframe(Path(generated_crt))
 
     if st.session_state.pages_visited:
         days = total_analyst_days()
